@@ -73,10 +73,11 @@ function receiverCandidate(
 function receiverHandshake(request: Uint8Array) {
   return response(
     request,
-    request[2] === 0x84
-      ? { 6: 0x10, 7: 0x37, 8: 0x01, 9: 0x34 }
-      : { 7: 8 },
+    request[2] === 0x84 ? { 6: 0x10, 7: 0x37, 8: 0x01, 9: 0x34 } : { 7: 8 },
   );
+}
+async function flushMicrotasks() {
+  for (let i = 0; i < 20; i++) await Promise.resolve();
 }
 test("polling query matches the packet captured from the connected mouse", () => {
   assert.equal(
@@ -187,6 +188,87 @@ test("transport polls the same pending command and discards stale replies", asyn
   assert.equal(fake.writes.length, 1);
   assert.equal(reads, 3);
 });
+test("1K transport waits 30 ms before its first GET and polls pending without resending", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const readTimes: number[] = [];
+  const fake = receiverCandidate((request) => {
+    readTimes.push(Date.now());
+    return response(request, readTimes.length === 1 ? { 0: 2 } : { 7: 8 });
+  });
+  const client = new PulsarHidClient();
+  client.device = fake.device;
+  const pending = client.transact(readCommand(1, 9, 2));
+  await flushMicrotasks();
+  assert.equal(fake.writes.length, 1);
+  assert.deepEqual(readTimes, []);
+  t.mock.timers.tick(29);
+  await flushMicrotasks();
+  assert.deepEqual(readTimes, []);
+  t.mock.timers.tick(1);
+  await flushMicrotasks();
+  assert.deepEqual(readTimes, [30]);
+  t.mock.timers.tick(20);
+  assert.equal((await pending)[7], 8);
+  assert.deepEqual(readTimes, [30, 50]);
+  assert.equal(fake.writes.length, 1);
+});
+test("1K firmware reads wait 100 ms before the first GET", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const readTimes: number[] = [];
+  const fake = receiverCandidate((request) => {
+    readTimes.push(Date.now());
+    return response(request);
+  });
+  const client = new PulsarHidClient();
+  client.device = fake.device;
+  const pending = client.transact(readCommand(1, 7, 4));
+  await flushMicrotasks();
+  assert.deepEqual(readTimes, []);
+  t.mock.timers.tick(99);
+  await flushMicrotasks();
+  assert.deepEqual(readTimes, []);
+  t.mock.timers.tick(1);
+  await pending;
+  assert.deepEqual(readTimes, [100]);
+  assert.equal(fake.writes.length, 1);
+});
+test("1K transport stops before GET when disconnected during its initial wait", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  let reads = 0;
+  const fake = receiverCandidate((request) => {
+    reads++;
+    return response(request);
+  });
+  const client = new PulsarHidClient();
+  client.device = fake.device;
+  const pending = client.transact(readCommand(1, 9, 2));
+  const rejected = assert.rejects(pending, /断开连接/);
+  await flushMicrotasks();
+  await client.disconnect();
+  t.mock.timers.tick(30);
+  await rejected;
+  assert.equal(reads, 0);
+  assert.equal(fake.writes.length, 1);
+});
+test("cable and 8K transport do not acquire the 1K first-GET delay", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  for (const productId of [0x3401, 0x5403]) {
+    for (const command of [readCommand(1, 9, 2), readCommand(1, 7, 4)]) {
+      let reads = 0;
+      const fake = fakeDevice((request) => {
+        reads++;
+        return response(request);
+      });
+      fake.device.productId = productId;
+      const client = new PulsarHidClient();
+      client.device = fake.device;
+      const pending = client.transact(command);
+      await flushMicrotasks();
+      assert.equal(reads, 1);
+      await pending;
+    }
+  }
+});
 test("transport stops on the captured receiver status 05 instead of polling or resending", async () => {
   const offlineReply = bytes(
     "05018902000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009100",
@@ -234,11 +316,7 @@ test("transport discards receiver status 05 for an unrelated category or registe
     reads++;
     return response(
       request,
-      reads === 1
-        ? { 0: 5, 1: 8 }
-        : reads === 2
-          ? { 0: 5, 2: 0x84 }
-          : { 7: 8 },
+      reads === 1 ? { 0: 5, 1: 8 } : reads === 2 ? { 0: 5, 2: 0x84 } : { 7: 8 },
     );
   });
   const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 100 });
@@ -257,12 +335,15 @@ test("transport reports a corrupt status 05 packet as a checksum failure", async
   });
   const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
   client.device = fake.device;
-  await assert.rejects(client.transact(readCommand(1, 9, 2)), (error: unknown) => {
-    assert.ok(error instanceof Error);
-    assert.match(error.message, /校验和/);
-    assert.doesNotMatch(error.message, /状态 05/);
-    return true;
-  });
+  await assert.rejects(
+    client.transact(readCommand(1, 9, 2)),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /校验和/);
+      assert.doesNotMatch(error.message, /状态 05/);
+      return true;
+    },
+  );
   assert.equal(reads, 1);
   assert.equal(fake.writes.length, 1);
 });
@@ -374,7 +455,11 @@ test("receiver connection failures explain wireless recovery and retain the caus
   assert.equal(client.connected, false);
 });
 test("1K receiver preflight skips short interfaces without SET and handshakes the full interface", async () => {
-  for (const probe of [new Uint8Array(1), new Uint8Array(63), new Uint8Array(66)]) {
+  for (const probe of [
+    new Uint8Array(1),
+    new Uint8Array(63),
+    new Uint8Array(66),
+  ]) {
     const short = receiverCandidate(() => probe);
     const readsAtWriteCounts: number[] = [];
     const full = receiverCandidate((request) => {
@@ -391,7 +476,10 @@ test("1K receiver preflight skips short interfaces without SET and handshakes th
     assert.equal(short.writes.length, 0);
     assert.equal(short.device.opened, false);
     assert.deepEqual(readsAtWriteCounts, [0, 1, 2]);
-    assert.deepEqual(full.writes.map((packet) => packet[2]), [0x89, 0x84]);
+    assert.deepEqual(
+      full.writes.map((packet) => packet[2]),
+      [0x89, 0x84],
+    );
     assert.deepEqual(
       client.connectionAttempts.map(({ candidate, phase, probeLength }) => ({
         candidate,
@@ -418,7 +506,10 @@ test("1K receiver preflight accepts a 65-byte report only with its leading zero 
     const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
     if (prefix === 0) {
       assert.equal(await client.connectDevices([fake.device]), fake.device);
-      assert.deepEqual(fake.writes.map((packet) => packet[2]), [0x89, 0x84]);
+      assert.deepEqual(
+        fake.writes.map((packet) => packet[2]),
+        [0x89, 0x84],
+      );
       assert.equal(client.connectionAttempts[0].probeLength, 65);
     } else {
       await assert.rejects(client.connectDevices([fake.device]), /报告长度/);
@@ -438,7 +529,10 @@ test("1K receiver preflight cannot accept a cached reply as a fresh handshake", 
   });
   const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
   await assert.rejects(client.connectDevices([fake.device]), /状态 05/);
-  assert.deepEqual(fake.writes.map((packet) => packet[2]), [0x89]);
+  assert.deepEqual(
+    fake.writes.map((packet) => packet[2]),
+    [0x89],
+  );
   assert.equal(reads, 2);
   assert.equal(client.connected, false);
   assert.equal(client.connectionAttempts[0].phase, "polling");
@@ -446,8 +540,11 @@ test("1K receiver preflight cannot accept a cached reply as a fresh handshake", 
 test("1K receiver preflight closes a hanging candidate and continues to the next", async () => {
   const hung = receiverCandidate(() => new Promise<Uint8Array>(() => {}));
   const full = receiverCandidate((request) => receiverHandshake(request));
-  const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 25 });
-  assert.equal(await client.connectDevices([hung.device, full.device]), full.device);
+  const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 100 });
+  assert.equal(
+    await client.connectDevices([hung.device, full.device]),
+    full.device,
+  );
   assert.equal(hung.writes.length, 0);
   assert.equal(hung.device.opened, false);
   assert.equal(client.connected, true);
@@ -518,6 +615,153 @@ test("connection errors preserve a full receiver interface failure over a later 
     assert.equal(full.device.opened, false);
     assert.equal(short.device.opened, false);
   }
+});
+test("1K identity retries only failed sends and can confirm the paired mouse on attempt three", async () => {
+  const fake = receiverCandidate((request) => receiverHandshake(request));
+  const send = fake.device.sendFeatureReport;
+  const identityTimes: number[] = [];
+  fake.device.sendFeatureReport = async function (id, data) {
+    await send.call(this, id, data);
+    if (fake.writes.at(-1)?.[2] === 0x84) {
+      identityTimes.push(Date.now());
+      if (identityTimes.length < 3)
+        throw new Error("Failed to write the feature report.");
+    }
+  };
+  const client = new PulsarHidClient();
+  assert.equal(await client.connectDevices([fake.device]), fake.device);
+  assert.deepEqual(
+    fake.writes.map((packet) => packet[2]),
+    [0x89, 0x84, 0x84, 0x84],
+  );
+  assert.equal(client.connectionAttempts[0].identityTries, 3);
+  assert.ok(identityTimes[1] - identityTimes[0] >= 25);
+  assert.ok(identityTimes[2] - identityTimes[1] >= 25);
+  await client.disconnect();
+});
+test("1K identity failed sends stop at four attempts and retain the original error name", async () => {
+  const fake = receiverCandidate((request) => receiverHandshake(request));
+  const send = fake.device.sendFeatureReport;
+  const original = new DOMException(
+    "Failed to write the feature report.",
+    "NotAllowedError",
+  );
+  fake.device.sendFeatureReport = async function (id, data) {
+    await send.call(this, id, data);
+    if (fake.writes.at(-1)?.[2] === 0x84) throw original;
+  };
+  const client = new PulsarHidClient();
+  await assert.rejects(client.connectDevices([fake.device]), /Failed to write/);
+  assert.equal(fake.writes.filter((packet) => packet[2] === 0x84).length, 4);
+  assert.equal(client.connectionAttempts[0].identityTries, 4);
+  assert.equal(client.connectionAttempts[0].errorName, "NotAllowedError");
+  assert.equal(fake.device.opened, false);
+});
+test("1K identity retry stops when the connection changes during its recovery wait", async () => {
+  const fake = receiverCandidate((request) => receiverHandshake(request));
+  const send = fake.device.sendFeatureReport;
+  const client = new PulsarHidClient();
+  fake.device.sendFeatureReport = async function (id, data) {
+    await send.call(this, id, data);
+    if (fake.writes.at(-1)?.[2] === 0x84) {
+      setTimeout(() => {
+        void client.disconnect().then(() => {
+          // Even reopening the same object cannot revive the old epoch.
+          fake.device.opened = true;
+          client.device = fake.device;
+        });
+      }, 5);
+      throw new Error("Failed to write the feature report.");
+    }
+  };
+  await assert.rejects(client.connectDevices([fake.device]), /断开连接/);
+  assert.equal(fake.writes.filter((packet) => packet[2] === 0x84).length, 1);
+  assert.equal(client.connectionAttempts[0].identityTries, 1);
+});
+test("1K identity never retries an I/O timeout that invalidates the device", async () => {
+  const fake = receiverCandidate((request) => receiverHandshake(request));
+  const send = fake.device.sendFeatureReport;
+  fake.device.sendFeatureReport = async function (id, data) {
+    await send.call(this, id, data);
+    if (fake.writes.at(-1)?.[2] === 0x84) await new Promise<void>(() => {});
+  };
+  const client = new PulsarHidClient({ timeoutMs: 100 });
+  await assert.rejects(client.connectDevices([fake.device]), /HID I\/O 超时/);
+  assert.equal(fake.writes.filter((packet) => packet[2] === 0x84).length, 1);
+  assert.equal(client.connectionAttempts[0].identityTries, 1);
+  assert.equal(client.connected, false);
+});
+test("1K identity does not retry wrong models, terminal replies, corrupt replies or receive errors", async () => {
+  for (const failure of [
+    "model",
+    "offline",
+    "unsupported",
+    "checksum",
+    "receive",
+  ]) {
+    const fake = receiverCandidate((request) => {
+      if (request[2] !== 0x84) return receiverHandshake(request);
+      if (failure === "receive")
+        throw new Error("Failed to receive the feature report.");
+      const reply = receiverHandshake(request);
+      if (failure === "model") return response(reply, { 8: 0x09 });
+      if (failure === "offline") return response(reply, { 0: 5 });
+      if (failure === "unsupported") return response(reply, { 0: 4 });
+      reply[63] ^= 1;
+      return reply;
+    });
+    const client = new PulsarHidClient();
+    await assert.rejects(client.connectDevices([fake.device]));
+    assert.equal(fake.writes.filter((packet) => packet[2] === 0x84).length, 1);
+    assert.equal(client.connectionAttempts[0].identityTries, 1);
+  }
+});
+test("8K identity retains its single-send behavior", async () => {
+  const fake = receiverCandidate((request) => receiverHandshake(request));
+  fake.device.productId = 0x5403;
+  const send = fake.device.sendFeatureReport;
+  fake.device.sendFeatureReport = async function (id, data) {
+    await send.call(this, id, data);
+    if (fake.writes.at(-1)?.[2] === 0x84)
+      throw new Error("identity send failed");
+  };
+  const client = new PulsarHidClient();
+  await assert.rejects(
+    client.connectDevices([fake.device]),
+    /identity send failed/,
+  );
+  assert.equal(fake.writes.filter((packet) => packet[2] === 0x84).length, 1);
+});
+test("ordinary setting send failures are never retried and preserve their original cause", async () => {
+  const fake = receiverCandidate((request) => response(request));
+  const send = fake.device.sendFeatureReport;
+  const original = new DOMException(
+    "Failed to write the feature report.",
+    "NotAllowedError",
+  );
+  fake.device.sendFeatureReport = async function (id, data) {
+    await send.call(this, id, data);
+    throw original;
+  };
+  const client = new PulsarHidClient();
+  client.device = fake.device;
+  await assert.rejects(
+    client.transact({
+      category: 1,
+      register: 9,
+      sub: 2,
+      profile: 0,
+      payload: [8],
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.name, original.name);
+      assert.equal(error.message, original.message);
+      assert.equal(error.cause, original);
+      return true;
+    },
+  );
+  assert.equal(fake.writes.length, 1);
 });
 test("whole settings batch is validated before the first write", async () => {
   const fake = fakeDevice((request) => response(request));
@@ -831,7 +1075,10 @@ test("8K receiver indicator writes still complete with matching power readback",
   fake.device.productId = 0x5403;
   const client = new PulsarHidClient();
   client.device = fake.device;
-  assert.equal((await client.writePower({ receiverIndicator: 2 })).receiverIndicator, 2);
+  assert.equal(
+    (await client.writePower({ receiverIndicator: 2 })).receiverIndicator,
+    2,
+  );
 });
 test("notification parser respects separate report ID and native one-based DPI stages", () => {
   assert.deepEqual(parseInputReport(5, new Uint8Array([5, 3, 0x40, 6])), {

@@ -25,6 +25,7 @@ import {
   PulsarHidClient,
   type HidDevice,
   type DeviceMacroSummary,
+  type ConnectionAttempt,
 } from "../src/hid";
 import type {
   DeviceSnapshot,
@@ -86,6 +87,7 @@ const audit: {
   temporaryMacroId?: number;
   tests: { name: string; status: string; error?: string }[];
   logs: unknown[];
+  connectionAttempts?: ConnectionAttempt[];
   final?: DeviceSnapshot;
   finishedAt?: string;
   error?: string;
@@ -503,6 +505,7 @@ try {
     process.exitCode = 1;
   }
   audit.finishedAt = new Date().toISOString();
+  audit.connectionAttempts = structuredClone(client.connectionAttempts);
   persist();
   await client.dispose();
   console.log(
@@ -512,6 +515,7 @@ try {
         writeTest,
         tests: audit.tests,
         restorationErrors: recoveryErrors,
+        connectionAttempts: audit.connectionAttempts,
         evidence: output,
         backup: backupPath,
       },

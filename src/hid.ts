@@ -64,6 +64,7 @@ export interface ConnectionAttempt {
   productId: number;
   phase: "open" | "probe" | "polling" | "identity" | "connected";
   probeLength?: number;
+  identityTries?: number;
   errorName?: string;
   error?: string;
 }
@@ -84,6 +85,12 @@ export interface ClientOptions {
 }
 const delay = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
+class FeatureSendError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.name = cause instanceof Error ? cause.name : "Error";
+  }
+}
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === "object")
@@ -202,7 +209,9 @@ export class PulsarHidClient {
             probe.byteLength !== REPORT_SIZE &&
             !(probe.byteLength === REPORT_SIZE + 1 && probe.getUint8(0) === 0)
           )
-            throw new Error(`接收器接口报告长度不匹配（${probe.byteLength} 字节）`);
+            throw new Error(
+              `接收器接口报告长度不匹配（${probe.byteLength} 字节）`,
+            );
           // The passive read may contain zeros or an old reply. Only the new
           // polling and identity requests below can confirm this connection.
         }
@@ -225,7 +234,7 @@ export class PulsarHidClient {
           attempt.phase = "identity";
           // Fusion2 receivers are shared across mouse models. The receiver's
           // USB PID alone does not identify the mouse receiving our settings.
-          const identity = await this.transact(readCommand(1, 4, 4));
+          const identity = await this.readReceiverIdentity(device, attempt);
           const vendorId = identity[6] | (identity[7] << 8),
             productId = identity[8] | (identity[9] << 8);
           if (vendorId !== VENDOR_ID || productId !== 0x3401) {
@@ -260,6 +269,34 @@ export class PulsarHidClient {
     throw new Error(
       `无法读取 Pulsar 配置接口。${recovery}${lastError ? ` ${lastError}` : ""}`,
     );
+  }
+  private async readReceiverIdentity(
+    device: HidDevice,
+    attempt: ConnectionAttempt,
+  ): Promise<Uint8Array> {
+    const epoch = this.epoch;
+    // Native discovery makes one identity read, then up to three more.
+    const maxTries = device.productId === 0x5402 ? 4 : 1;
+    for (let tries = 1; ; tries++) {
+      attempt.identityTries = tries;
+      try {
+        return await this.transact(readCommand(1, 4, 4));
+      } catch (error) {
+        if (
+          !(error instanceof FeatureSendError) ||
+          tries >= maxTries ||
+          this.device !== device ||
+          this.epoch !== epoch ||
+          !device.opened
+        )
+          throw error;
+      }
+      // Fusion retries this read-only identity query. Recovery is restricted
+      // to send failures; replies and configuration writes are never retried.
+      await delay(30);
+      if (this.device !== device || this.epoch !== epoch || !device.opened)
+        throw new Error("设备已断开连接");
+    }
   }
   private async readReceiverProbe(device: HidDevice): Promise<DataView> {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -335,7 +372,22 @@ export class PulsarHidClient {
           if (timer !== undefined) clearTimeout(timer);
         }
       };
-      await io(() => device.sendFeatureReport(0, request));
+      await io(async () => {
+        try {
+          await device.sendFeatureReport(0, request);
+        } catch (error) {
+          throw new FeatureSendError(error);
+        }
+      });
+      if (device.productId === 0x5402) {
+        // Match Fusion's SET-to-first-GET interval on the verified 1K receiver.
+        // Subsequent pending polls keep the existing cadence and same request.
+        await delay(
+          command.category === 1 && command.register === 0x87 ? 100 : 30,
+        );
+        if (this.device !== device || epoch !== this.epoch || !device.opened)
+          throw new Error("设备已断开连接");
+      }
       while (Date.now() <= deadline) {
         if (this.device !== device || epoch !== this.epoch)
           throw new Error("设备已断开连接");
