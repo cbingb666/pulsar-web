@@ -5,6 +5,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { saveAutoConnect, shouldAutoConnect } from "./connection-preference";
 import {
   Activity,
   ArrowDownToLine,
@@ -668,6 +669,7 @@ export default function App() {
     await connectDevice(false);
   }
   async function connectDevice(automatic: boolean, c = client()) {
+    if (automatic && !shouldAutoConnect()) return;
     await run(
       automatic ? "正在自动连接设备" : "连接并读取设备",
       async () => {
@@ -682,8 +684,9 @@ export default function App() {
         const deviceMacros = await c.listMacros();
         if (clientRef.current !== c) return;
         setDeviceMacros(deviceMacros);
+        const preferenceSaved = automatic || saveAutoConnect(true);
         setNotice({
-          text: `${automatic ? "已自动连接" : "已连接"}并读取设备。若此配置有未应用的本地草稿，草稿已保留，请确认后应用。`,
+          text: `${automatic ? "已自动连接" : "已连接"}并读取设备。若此配置有未应用的本地草稿，草稿已保留，请确认后应用。${preferenceSaved ? "" : "浏览器未能保存自动连接偏好，下次可能仍需手动连接。"}`,
         });
       },
       c,
@@ -926,10 +929,17 @@ export default function App() {
                 disabled={!!busy}
                 onClick={() =>
                   run("断开设备", async () => {
+                    const preferenceSaved = saveAutoConnect(false);
                     await client().disconnect();
                     setSnapshot(null);
                     setPowerDraft(undefined);
                     setDeviceMacros([]);
+                    setNotice({
+                      text: preferenceSaved
+                        ? "已断开。刷新或重新打开页面后也不会自动连接，直到你再次手动连接成功。"
+                        : "已断开，但浏览器未能保存连接偏好，刷新后可能再次自动连接。",
+                      error: !preferenceSaved,
+                    });
                   })
                 }
               >
