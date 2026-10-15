@@ -83,6 +83,12 @@ import {
   macroBinding,
   decodeMacroBinding,
 } from "./macro-codec";
+import {
+  applyImmediateSetting,
+  buildImmediateSettings,
+  mergeImmediateSettings,
+  type ImmediateChange,
+} from "./immediate-settings";
 
 type Tab =
   | "home"
@@ -185,6 +191,7 @@ function Range({
   step = 1,
   unit = "",
   onChange,
+  onCommit,
 }: {
   label: string;
   value: number;
@@ -193,7 +200,14 @@ function Range({
   step?: number;
   unit?: string;
   onChange: (n: number) => void;
+  onCommit?: (n: number) => void;
 }) {
+  const edited = useRef(false);
+  const commit = (value: number) => {
+    if (!edited.current) return;
+    edited.current = false;
+    onCommit?.(value);
+  };
   return (
     <div className="range-field">
       <div className="field-label">
@@ -210,7 +224,27 @@ function Range({
         max={max}
         step={step}
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={(e) => {
+          edited.current = true;
+          onChange(Number(e.target.value));
+        }}
+        onPointerUp={(e) => commit(Number(e.currentTarget.value))}
+        onKeyUp={(e) => {
+          if (
+            [
+              "ArrowLeft",
+              "ArrowRight",
+              "ArrowUp",
+              "ArrowDown",
+              "Home",
+              "End",
+              "PageUp",
+              "PageDown",
+            ].includes(e.key)
+          )
+            commit(Number(e.currentTarget.value));
+        }}
+        onBlur={(e) => commit(Number(e.currentTarget.value))}
       />
       <div className="range-scale">
         <span>
@@ -223,6 +257,44 @@ function Range({
         </span>
       </div>
     </div>
+  );
+}
+function DpiInput({
+  label,
+  value,
+  onChange,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  onCommit: (value: number) => void;
+}) {
+  const edited = useRef(false);
+  return (
+    <input
+      type="number"
+      aria-label={label}
+      min={DPI_MIN}
+      max={DPI_MAX}
+      step={10}
+      value={value}
+      onChange={(e) => {
+        edited.current = true;
+        onChange(Number(e.currentTarget.value));
+      }}
+      onBlur={(e) => {
+        if (!edited.current) return;
+        edited.current = false;
+        onCommit(Number(e.currentTarget.value));
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
+      }}
+    />
   );
 }
 function MouseFigure({
@@ -388,7 +460,8 @@ export default function App() {
   const client = () => clientRef.current!;
   const dirty =
     !!snapshot &&
-    (!equal(snapshot.global, g) ||
+    (current.dpiLayoutPending ||
+      !equal(snapshot.global, g) ||
       !equal(snapshot.profile, p) ||
       !equal(snapshot.power, powerDraft));
   useEffect(() => {
@@ -447,10 +520,90 @@ export default function App() {
       ),
     );
   }
-  const setProfile = (patch: Partial<ProfileSettings>) =>
-    update((v) => ({ ...v, profile: { ...v.profile, ...patch } }));
+  const setProfile = (patch: Partial<ProfileSettings>, layoutChange = false) =>
+    update((v) => ({
+      ...v,
+      dpiLayoutPending: layoutChange || v.dpiLayoutPending,
+      profile: { ...v.profile, ...patch },
+    }));
   const setGlobal = (patch: Partial<GlobalSettings>) =>
     update((v) => ({ ...v, global: { ...v.global, ...patch } }));
+  function stageImmediateChange(change: ImmediateChange) {
+    update((v) => {
+      if (change.kind === "global")
+        v.global = { ...v.global, [change.field]: change.value };
+      else if (change.kind === "dpi")
+        v.profile.dpiStages = v.profile.dpiStages.map((stage, index) =>
+          index + 1 === change.stage
+            ? { ...stage, x: change.x ?? stage.x, y: change.y ?? stage.y }
+            : stage,
+        );
+      else v.profile = { ...v.profile, [change.kind]: change.value };
+      return v;
+    });
+  }
+  async function commitImmediate(change: ImmediateChange, label: string) {
+    if (busyRef.current) return;
+    stageImmediateChange(change);
+    // Only explicit control events reach this path; loading/importing a draft
+    // or reconnecting must never automatically flush saved browser settings.
+    if (!connected || !snapshot) {
+      if (connected)
+        setNotice({
+          text: "更改已暂存。请先重新读取设备，恢复即时应用。",
+          error: true,
+        });
+      return;
+    }
+    if (
+      (change.kind === "dpi" || change.kind === "activeStage") &&
+      (current.dpiLayoutPending ||
+        p.dpiStages.length !== snapshot.profile.dpiStages.length)
+    ) {
+      setNotice({
+        text: "DPI 档位增删或导入草稿尚未应用，本次更改已暂存。请点击“应用到鼠标”。",
+      });
+      return;
+    }
+    let next: DeviceSnapshot;
+    try {
+      next = buildImmediateSettings(snapshot, change);
+    } catch (error) {
+      setNotice({
+        text: `${label}未写入：${error instanceof Error ? error.message : error}`,
+        error: true,
+      });
+      return;
+    }
+    const mergeSaved = (actual: DeviceSnapshot) =>
+      setProfiles((old) =>
+        old.map((v, index) =>
+          index === selectedProfile - 1
+            ? mergeImmediateSettings(v, actual, change)
+            : v,
+        ),
+      );
+    if (
+      equal(next.global, snapshot.global) &&
+      equal(next.profile, snapshot.profile)
+    ) {
+      mergeSaved(snapshot);
+      return;
+    }
+    await run(`正在应用${label}`, async () => {
+      try {
+        const actual = await applyImmediateSetting(client(), snapshot, change);
+        setSnapshot(actual);
+        mergeSaved(actual);
+        setNotice({ text: `${label}已生效，设备回读已确认。` });
+      } catch (error) {
+        setSnapshot(null);
+        throw new Error(
+          `${label}未确认生效：${error instanceof Error ? error.message : error}。已暂停即时应用，请重新读取设备检查实际值。`,
+        );
+      }
+    });
+  }
   function applySnapshot(
     s: DeviceSnapshot,
     index: number,
@@ -468,6 +621,7 @@ export default function App() {
                 global: clone(s.global),
                 profile: clone(s.profile),
                 pending: false,
+                dpiLayoutPending: false,
               }
           : v,
       ),
@@ -661,7 +815,7 @@ export default function App() {
     ? snapshot
       ? dirty
         ? "有待应用的更改"
-        : "配置已读取"
+        : "设备配置已同步"
       : "等待读取配置"
     : "本地编辑模式";
   const page = tabs.find((t) => t.id === tab);
@@ -917,9 +1071,22 @@ export default function App() {
               )}
               {tab === "performance" && (
                 <>
+                  <div className="callout">
+                    <Zap size={18} />
+                    <span>
+                      <b>
+                        {connected && snapshot
+                          ? "性能设置即时生效"
+                          : "连接并读取后，性能设置即时生效"}
+                      </b>
+                      <br />
+                      DPI 档位、回报率、LOD 和传感器开关点击即生效。 DPI 数值按
+                      Enter 或离开输入框时保存，消抖滑块松开时保存。
+                    </span>
+                  </div>
                   <Panel
                     title="DPI 灵敏度"
-                    sub="为不同场景设置灵敏度，点击档位编号选择当前档位。"
+                    sub="点击编号切换当前档位；数值编辑完成后自动应用。"
                     icon={Gauge}
                   >
                     <div className="panel-toolbar">
@@ -952,7 +1119,10 @@ export default function App() {
                               aria-label={`选择 DPI 档位 ${index + 1}`}
                               className="stage-index"
                               onClick={() =>
-                                setProfile({ activeStage: index + 1 })
+                                void commitImmediate(
+                                  { kind: "activeStage", value: index + 1 },
+                                  "DPI 档位",
+                                )
                               }
                             >
                               {index + 1}
@@ -978,15 +1148,18 @@ export default function App() {
                                 title="移除档位"
                                 aria-label={`移除档位 ${index + 1}`}
                                 onClick={() =>
-                                  setProfile({
-                                    dpiStages: p.dpiStages.filter(
-                                      (_, i) => i !== index,
-                                    ),
-                                    activeStage: Math.min(
-                                      p.activeStage,
-                                      p.dpiStages.length - 1,
-                                    ),
-                                  })
+                                  setProfile(
+                                    {
+                                      dpiStages: p.dpiStages.filter(
+                                        (_, i) => i !== index,
+                                      ),
+                                      activeStage: Math.min(
+                                        p.activeStage,
+                                        p.dpiStages.length - 1,
+                                      ),
+                                    },
+                                    true,
+                                  )
                                 }
                               >
                                 <X size={12} />
@@ -995,15 +1168,10 @@ export default function App() {
                           </div>
                           <label className="dpi-value">
                             <span>{linked ? "DPI" : "X"}</span>
-                            <input
-                              type="number"
-                              aria-label={`档位 ${index + 1} X DPI`}
-                              min={DPI_MIN}
-                              max={DPI_MAX}
-                              step={10}
+                            <DpiInput
+                              label={`档位 ${index + 1} X DPI`}
                               value={stage.x}
-                              onChange={(e) => {
-                                const x = Number(e.target.value);
+                              onChange={(x) => {
                                 setProfile({
                                   dpiStages: p.dpiStages.map((s, i) =>
                                     i === index
@@ -1012,26 +1180,41 @@ export default function App() {
                                   ),
                                 });
                               }}
+                              onCommit={(x) => {
+                                void commitImmediate(
+                                  {
+                                    kind: "dpi",
+                                    stage: index + 1,
+                                    x,
+                                    ...(linked ? { y: x } : {}),
+                                  },
+                                  `第 ${index + 1} 档 DPI`,
+                                );
+                              }}
                             />
                           </label>
                           {!linked && (
                             <label className="dpi-value">
                               <span>Y</span>
-                              <input
-                                type="number"
-                                aria-label={`档位 ${index + 1} Y DPI`}
-                                min={DPI_MIN}
-                                max={DPI_MAX}
-                                step={10}
+                              <DpiInput
+                                label={`档位 ${index + 1} Y DPI`}
                                 value={stage.y}
-                                onChange={(e) =>
+                                onChange={(y) =>
                                   setProfile({
                                     dpiStages: p.dpiStages.map((s, i) =>
-                                      i === index
-                                        ? { ...s, y: Number(e.target.value) }
-                                        : s,
+                                      i === index ? { ...s, y } : s,
                                     ),
                                   })
+                                }
+                                onCommit={(y) =>
+                                  void commitImmediate(
+                                    {
+                                      kind: "dpi",
+                                      stage: index + 1,
+                                      y,
+                                    },
+                                    `第 ${index + 1} 档 Y DPI`,
+                                  )
                                 }
                               />
                             </label>
@@ -1045,17 +1228,22 @@ export default function App() {
                       ))}
                     </div>
                     <div className="section-foot">
-                      <small>50 – 32,000 DPI · 以 10 DPI 为单位调整</small>
+                      <small>
+                        50 – 32,000 DPI · 步长 10 · 档位增删和颜色需点击应用
+                      </small>
                       <button
                         className="text-button"
                         disabled={p.dpiStages.length >= 6}
                         onClick={() =>
-                          setProfile({
-                            dpiStages: [
-                              ...p.dpiStages,
-                              { x: 1600, y: 1600, color: [0, 132, 255] },
-                            ],
-                          })
+                          setProfile(
+                            {
+                              dpiStages: [
+                                ...p.dpiStages,
+                                { x: 1600, y: 1600, color: [0, 132, 255] },
+                              ],
+                            },
+                            true,
+                          )
                         }
                       >
                         <Plus size={14} />
@@ -1078,7 +1266,16 @@ export default function App() {
                           <button
                             key={rate}
                             className={g.pollingRate === rate ? "active" : ""}
-                            onClick={() => setGlobal({ pollingRate: rate })}
+                            onClick={() =>
+                              void commitImmediate(
+                                {
+                                  kind: "global",
+                                  field: "pollingRate",
+                                  value: rate,
+                                },
+                                "回报率",
+                              )
+                            }
                           >
                             <b>{rate}</b>
                             <span>Hz</span>
@@ -1103,7 +1300,12 @@ export default function App() {
                           <button
                             key={lod}
                             className={p.lod === lod ? "active" : ""}
-                            onClick={() => setProfile({ lod })}
+                            onClick={() =>
+                              void commitImmediate(
+                                { kind: "lod", value: lod },
+                                "抬起高度",
+                              )
+                            }
                           >
                             {lod.toFixed(1)} <small>mm</small>
                           </button>
@@ -1123,20 +1325,45 @@ export default function App() {
                         label="Motion Sync"
                         description="同步传感器数据与 USB 报告时序"
                         checked={g.motionSync}
-                        onChange={(motionSync) => setGlobal({ motionSync })}
+                        onChange={(motionSync) =>
+                          void commitImmediate(
+                            {
+                              kind: "global",
+                              field: "motionSync",
+                              value: motionSync,
+                            },
+                            "Motion Sync",
+                          )
+                        }
                       />
                       <Toggle
                         label="角度捕捉"
                         description="Angle Snapping · 修正移动轨迹"
                         checked={g.angleSnap}
-                        onChange={(angleSnap) => setGlobal({ angleSnap })}
+                        onChange={(angleSnap) =>
+                          void commitImmediate(
+                            {
+                              kind: "global",
+                              field: "angleSnap",
+                              value: angleSnap,
+                            },
+                            "角度捕捉",
+                          )
+                        }
                       />
                       <Toggle
                         label="波纹控制"
                         description="Ripple Control · 平滑传感器数据"
                         checked={g.rippleControl}
                         onChange={(rippleControl) =>
-                          setGlobal({ rippleControl })
+                          void commitImmediate(
+                            {
+                              kind: "global",
+                              field: "rippleControl",
+                              value: rippleControl,
+                            },
+                            "波纹控制",
+                          )
                         }
                       />
                     </Panel>
@@ -1152,13 +1379,23 @@ export default function App() {
                         max={15}
                         unit="ms"
                         onChange={(debounce) => setGlobal({ debounce })}
+                        onCommit={(debounce) =>
+                          void commitImmediate(
+                            {
+                              kind: "global",
+                              field: "debounce",
+                              value: debounce,
+                            },
+                            "消抖时间",
+                          )
+                        }
                       />
                       <p className="hint">较低的时间可能增加重复点击的概率。</p>
                     </Panel>
                   </div>
                   <Panel
                     title="DPI 指示灯"
-                    sub="每个档位的颜色可在上方单独设置"
+                    sub="灯光和颜色更改暂存，点击“应用到鼠标”后保存。"
                     icon={Zap}
                   >
                     <div className="led-layout">
@@ -1924,6 +2161,7 @@ export default function App() {
                 onClick={() => {
                   update((v) => ({
                     ...v,
+                    dpiLayoutPending: true,
                     global: defaultGlobal(),
                     profile: defaultProfile(selectedProfile),
                   }));
@@ -1955,14 +2193,14 @@ export default function App() {
                   ? dirty
                     ? "更改尚未应用"
                     : snapshot
-                      ? "设备配置已读取"
+                      ? "设备配置已同步"
                       : "请重新读取设备"
                   : "设置已保存在此浏览器")}
             </span>
             <small>
               {connected
-                ? "应用后会重新读取设备，确认设置生效。"
-                : "连接设备后即可应用配置。"}
+                ? "性能调整即时生效；按键、灯光、电源和导入等更改需点击应用。"
+                : "离线编辑仅存为草稿，连接后不会自动写入。"}
             </small>
           </div>
           <div className="button-group">
@@ -2059,7 +2297,10 @@ export default function App() {
                 在浏览器选择器中选择 Xlite v4；使用 1K 接收器时选择“1K
                 Dongle”，允许访问。
               </li>
-              <li>读取配置后编辑，点击“应用到鼠标”。</li>
+              <li>性能调整即时生效；DPI 数值完成输入、消抖滑块松开后保存。</li>
+              <li>
+                按键、灯光、电源、档位增删和导入草稿需点击“应用到鼠标”；宏需点击上传。
+              </li>
             </ol>
             <div className="callout">
               <Info size={18} />

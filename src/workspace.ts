@@ -9,6 +9,7 @@ import {
 } from "./protocol";
 export interface WorkspaceProfile {
   pending?: boolean;
+  dpiLayoutPending?: boolean;
   name: string;
   global: GlobalSettings;
   profile: ProfileSettings;
@@ -25,6 +26,7 @@ export const clone = <T>(value: T): T => structuredClone(value);
 export function makeProfile(index: number): WorkspaceProfile {
   return {
     name: `配置 ${index}`,
+    dpiLayoutPending: false,
     global: defaultGlobal(),
     profile: defaultProfile(index),
   };
@@ -47,6 +49,7 @@ export function parseProfileFile(
   validateProfile(file.profile);
   return {
     pending: true,
+    dpiLayoutPending: true,
     name: file.name,
     global: clone(file.global),
     profile: { ...clone(file.profile), profile: profileIndex },
@@ -90,6 +93,12 @@ export function loadWorkspace(): WorkspaceProfile[] {
           index + 1,
         ),
         pending: p.pending === true,
+        // Older pending drafts may contain a remove/add pair with the same
+        // stage count; require explicit application before using those indices.
+        dpiLayoutPending:
+          typeof p.dpiLayoutPending === "boolean"
+            ? p.dpiLayoutPending
+            : p.pending === true,
       };
     } catch {
       return makeProfile(index + 1);

@@ -63,7 +63,8 @@ Physical button IDs 1/2/3/4/5/11 were read successfully. Native `Device.ButtonID
 
 ## Implementation / acceptance rules
 
-- Opening a device performs read commands only. Editing controls stays local until Apply.
+- Opening/reconnecting a device performs read commands only and never flushes saved drafts. Explicit edits to performance controls use the single-field immediate-settings path; numeric inputs commit after editing and sliders at gesture completion. Other controls remain local until Apply.
+- Immediate edits are built from device readback, never from the whole editable draft. Check the current profile and relevant device settings before writing; external changes require a refresh. Merge only the requested field back into the workspace so pending bindings, imported layouts, colors and other drafts remain uncommitted.
 - Validate an entire batch before the first write. Do not overwrite unchanged fields.
 - Match the native debounce setter (value then zero); preserve unexposed LED bytes.
 - Wait for write completion, then read back settings and reject mismatches.

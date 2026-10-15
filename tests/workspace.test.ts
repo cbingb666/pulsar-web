@@ -27,6 +27,52 @@ test("profile import preserves mappings and axes while retargeting destination s
   assert.deepEqual(imported.profile.buttons, original.profile.buttons);
   assert.deepEqual(imported.profile.dpiStages, original.profile.dpiStages);
   assert.equal(imported.pending, true);
+  assert.equal(imported.dpiLayoutPending, true);
+});
+test("new drafts have a stable DPI layout and exported files omit workspace metadata", () => {
+  const profile = makeProfile(1);
+  assert.equal(profile.dpiLayoutPending, false);
+  profile.dpiLayoutPending = true;
+  profile.pending = true;
+  const exported = JSON.parse(exportProfileFile(profile));
+  assert.equal(Object.hasOwn(exported, "dpiLayoutPending"), false);
+  assert.equal(Object.hasOwn(exported, "pending"), false);
+  // File metadata cannot assert that an imported stage layout is already saved.
+  exported.dpiLayoutPending = false;
+  assert.equal(
+    parseProfileFile(JSON.stringify(exported), 1).dpiLayoutPending,
+    true,
+  );
+});
+test("DPI layout status survives saving and reloading pending workspace drafts", () => {
+  values.clear();
+  const profiles = Array.from({ length: 6 }, (_, i) => makeProfile(i + 1));
+  profiles[0].pending = true;
+  profiles[0].dpiLayoutPending = true;
+  profiles[1].pending = true;
+  profiles[1].dpiLayoutPending = false;
+  saveWorkspace(profiles);
+  const restored = loadWorkspace();
+  assert.equal(restored[0].dpiLayoutPending, true);
+  assert.equal(restored[1].dpiLayoutPending, false);
+  assert.equal(restored[2].dpiLayoutPending, false);
+  // An unfinished numeric edit must retain the last saved layout warning too.
+  restored[0].profile.dpiStages[0].x = 0;
+  restored[0].dpiLayoutPending = false;
+  saveWorkspace(restored);
+  assert.equal(loadWorkspace()[0].dpiLayoutPending, true);
+});
+test("old pending drafts conservatively require layout confirmation; clean old drafts do not", () => {
+  values.clear();
+  const profiles = Array.from({ length: 6 }, (_, i) => makeProfile(i + 1));
+  for (const profile of profiles) delete profile.dpiLayoutPending;
+  profiles[0].pending = true;
+  profiles[1].pending = false;
+  localStorage.setItem("pulsar-workspace-v1", JSON.stringify(profiles));
+  const restored = loadWorkspace();
+  assert.equal(restored[0].dpiLayoutPending, true);
+  assert.equal(restored[1].dpiLayoutPending, false);
+  assert.equal(restored[2].dpiLayoutPending, false);
 });
 test("invalid transient input cannot replace prior valid stored configuration", () => {
   values.clear();
