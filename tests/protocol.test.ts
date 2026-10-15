@@ -79,6 +79,123 @@ function receiverHandshake(request: Uint8Array) {
 async function flushMicrotasks() {
   for (let i = 0; i < 20; i++) await Promise.resolve();
 }
+test("reconnect uses existing grants without opening a picker and only sends reads", async () => {
+  const fake = receiverCandidate(receiverHandshake);
+  fake.device.opened = false;
+  const unrelated = fakeDevice(receiverHandshake);
+  unrelated.device.vendorId = 0x1234;
+  unrelated.device.open = async () => assert.fail("unrelated device opened");
+  let queries = 0;
+  const client = new PulsarHidClient({
+    hid: {
+      async getDevices() {
+        queries++;
+        return [unrelated.device, fake.device];
+      },
+      async requestDevice() {
+        assert.fail("automatic connection must not request permission");
+      },
+    },
+  });
+  assert.equal(await client.reconnect(), fake.device);
+  assert.equal(queries, 1);
+  assert.equal(client.connected, true);
+  assert.ok(fake.writes.length > 0);
+  assert.ok(fake.writes.every((packet) => (packet[2] & 0x80) !== 0));
+  await client.dispose();
+});
+test("reconnect quietly stays offline without a supported granted configuration interface", async () => {
+  const unrelated = receiverCandidate(receiverHandshake).device;
+  unrelated.vendorId = 0x1234;
+  const noFeature = fakeDevice(receiverHandshake).device;
+  for (const devices of [[], [unrelated], [noFeature]]) {
+    const client = new PulsarHidClient({
+      hid: {
+        async getDevices() {
+          return devices;
+        },
+        async requestDevice() {
+          assert.fail("unexpected permission prompt");
+        },
+      },
+    });
+    assert.equal(await client.reconnect(), null);
+    assert.equal(client.connected, false);
+    assert.deepEqual(client.connectionAttempts, []);
+    await client.dispose();
+  }
+});
+test("failed automatic connection retains diagnostics and allows a manual retry", async () => {
+  const fake = receiverCandidate(receiverHandshake);
+  fake.device.opened = false;
+  fake.device.open = async () => {
+    throw new Error("device busy");
+  };
+  let prompts = 0;
+  const client = new PulsarHidClient({
+    hid: {
+      async getDevices() {
+        return [fake.device];
+      },
+      async requestDevice() {
+        prompts++;
+        return [fake.device];
+      },
+    },
+  });
+  await assert.rejects(client.reconnect(), /device busy/);
+  assert.equal(prompts, 0);
+  assert.equal(client.connected, false);
+  assert.equal(client.connectionAttempts[0].error, "device busy");
+  fake.device.open = async () => {
+    fake.device.opened = true;
+  };
+  assert.equal(await client.connect(), fake.device);
+  assert.equal(prompts, 1);
+  await client.dispose();
+});
+test("disposing while granted devices are being listed prevents a late connection", async () => {
+  const fake = receiverCandidate(receiverHandshake);
+  fake.device.opened = false;
+  fake.device.open = async () => assert.fail("disposed client opened a device");
+  let resolve!: (devices: HidDevice[]) => void;
+  const client = new PulsarHidClient({
+    hid: {
+      getDevices: () => new Promise((done) => {
+        resolve = done;
+      }),
+      async requestDevice() {
+        assert.fail("unexpected permission prompt");
+      },
+    },
+  });
+  const pending = client.reconnect();
+  await client.dispose();
+  resolve([fake.device]);
+  assert.equal(await pending, null);
+  assert.equal(client.connected, false);
+  assert.deepEqual(fake.writes, []);
+});
+test("disposing during device open closes the late handle without sending commands", async () => {
+  const fake = receiverCandidate(receiverHandshake);
+  fake.device.opened = false;
+  let finishOpen!: () => void;
+  fake.device.open = () => new Promise((resolve) => {
+    finishOpen = () => {
+      fake.device.opened = true;
+      resolve();
+    };
+  });
+  const client = new PulsarHidClient();
+  const pending = client.connectDevices([fake.device]);
+  await flushMicrotasks();
+  await client.dispose();
+  finishOpen();
+  await assert.rejects(pending, /连接已取消/);
+  assert.equal(fake.device.opened, false);
+  assert.equal(client.connected, false);
+  assert.deepEqual(fake.writes, []);
+});
 test("polling query matches the packet captured from the connected mouse", () => {
   assert.equal(
     Buffer.from(buildPacket(1, 0x89, 2)).toString("hex"),

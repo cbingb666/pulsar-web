@@ -131,6 +131,7 @@ export class PulsarHidClient {
   private readonly api: HidApi | undefined;
   private queue: Promise<unknown> = Promise.resolve();
   private epoch = 0;
+  private disposed = false;
   readonly logs: ProtocolLog[] = [];
   readonly connectionAttempts: ConnectionAttempt[] = [];
   private readonly disconnectListener: EventListener;
@@ -177,8 +178,13 @@ export class PulsarHidClient {
       throw new Error("未选择设备。请重新连接并选择 Pulsar 鼠标。");
     return this.connectDevices(devices);
   }
-  async reconnect(): Promise<HidDevice> {
-    return this.connectDevices(await this.getGrantedDevices());
+  async reconnect(): Promise<HidDevice | null> {
+    const devices = (await this.getGrantedDevices()).filter((device) =>
+      containsFeature(device.collections),
+    );
+    // No permission/device is a normal first visit, never a reason to open a picker.
+    if (this.disposed || !devices.length) return null;
+    return this.connectDevices(devices);
   }
   async connectDevices(devices: HidDevice[]): Promise<HidDevice> {
     this.connectionAttempts.length = 0;
@@ -190,6 +196,7 @@ export class PulsarHidClient {
     let lastError = "";
     let lastErrorPriority = -1;
     for (const [index, device] of candidates.entries()) {
+      this.assertNotDisposed();
       const attempt: ConnectionAttempt = {
         candidate: index + 1,
         productName: device.productName,
@@ -199,6 +206,7 @@ export class PulsarHidClient {
       this.connectionAttempts.push(attempt);
       try {
         if (!device.opened) await device.open();
+        this.assertNotDisposed();
         if (device.productId === 0x5402) {
           attempt.phase = "probe";
           const probe = await this.readReceiverProbe(device);
@@ -215,6 +223,7 @@ export class PulsarHidClient {
           // The passive read may contain zeros or an old reply. Only the new
           // polling and identity requests below can confirm this connection.
         }
+        this.assertNotDisposed();
         this.device = device;
         attempt.phase = "polling";
         // There are two identically-described vendor collections on this mouse.
@@ -246,6 +255,7 @@ export class PulsarHidClient {
             );
           }
         }
+        this.assertNotDisposed();
         attempt.phase = "connected";
         return device;
       } catch (error) {
@@ -259,6 +269,7 @@ export class PulsarHidClient {
         }
         this.device = null;
         if (device.opened) await device.close().catch(() => undefined);
+        if (this.disposed) throw error;
       }
     }
     const recovery = devices.some(
@@ -321,8 +332,12 @@ export class PulsarHidClient {
     if (device?.opened) await device.close();
   }
   async dispose(): Promise<void> {
+    this.disposed = true;
     this.api?.removeEventListener?.("disconnect", this.disconnectListener);
     await this.disconnect();
+  }
+  private assertNotDisposed(): void {
+    if (this.disposed) throw new Error("设备连接已取消");
   }
   private log(direction: "out" | "in", bytes: Uint8Array): void {
     const entry: ProtocolLog = {

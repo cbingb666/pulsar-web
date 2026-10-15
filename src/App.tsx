@@ -474,6 +474,7 @@ export default function App() {
   useEffect(() => {
     const c = new PulsarHidClient({
       onDisconnect: () => {
+        if (clientRef.current !== c) return;
         setConnected(false);
         setSnapshot(null);
         setPowerDraft(undefined);
@@ -482,7 +483,14 @@ export default function App() {
       },
     });
     clientRef.current = c;
+    // Defer until after StrictMode's setup/cleanup replay, using this mount's client.
+    void Promise.resolve().then(() => {
+      if (clientRef.current === c && isWebHidSupported())
+        return connectDevice(true, c);
+    });
     return () => {
+      clientRef.current = null;
+      busyRef.current = false;
       void c.dispose();
     };
   }, []);
@@ -635,37 +643,51 @@ export default function App() {
     );
     setLogVersion((v) => v + 1);
   }
-  async function run(label: string, fn: () => Promise<void>) {
+  async function run(label: string, fn: () => Promise<void>, c = client()) {
     if (busyRef.current) return;
     busyRef.current = true;
     setBusy(label);
     try {
       await fn();
     } catch (e) {
-      setNotice({
-        text: e instanceof Error ? e.message : String(e),
-        error: true,
-      });
+      if (clientRef.current === c)
+        setNotice({
+          text: e instanceof Error ? e.message : String(e),
+          error: true,
+        });
     } finally {
-      busyRef.current = false;
-      setBusy("");
-      setConnected(client().connected);
-      setLogVersion((v) => v + 1);
+      if (clientRef.current === c) {
+        busyRef.current = false;
+        setBusy("");
+        setConnected(c.connected);
+        setLogVersion((v) => v + 1);
+      }
     }
   }
   async function connect() {
-    await run("连接并读取设备", async () => {
-      setDeviceMacros([]);
-      await client().connect();
-      setConnected(true);
-      const s = await client().readSnapshot();
-      setSelectedProfile(s.profile.profile);
-      applySnapshot(s, s.profile.profile, true);
-      setDeviceMacros(await client().listMacros());
-      setNotice({
-        text: "已连接并读取设备。若此配置有未应用的本地草稿，草稿已保留，请确认后应用。",
-      });
-    });
+    await connectDevice(false);
+  }
+  async function connectDevice(automatic: boolean, c = client()) {
+    await run(
+      automatic ? "正在自动连接设备" : "连接并读取设备",
+      async () => {
+        setDeviceMacros([]);
+        const device = automatic ? await c.reconnect() : await c.connect();
+        if (!device || clientRef.current !== c) return;
+        setConnected(true);
+        const s = await c.readSnapshot();
+        if (clientRef.current !== c) return;
+        setSelectedProfile(s.profile.profile);
+        applySnapshot(s, s.profile.profile, true);
+        const deviceMacros = await c.listMacros();
+        if (clientRef.current !== c) return;
+        setDeviceMacros(deviceMacros);
+        setNotice({
+          text: `${automatic ? "已自动连接" : "已连接"}并读取设备。若此配置有未应用的本地草稿，草稿已保留，请确认后应用。`,
+        });
+      },
+      c,
+    );
   }
   async function refresh() {
     await run("读取设备配置", async () => {
