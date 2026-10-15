@@ -27,7 +27,11 @@ Derived from [X2A source](https://github.com/packerlschupfer/pulsar-mouse-linux/
 
 USB HID Feature report ID is **0**. WebHID `sendFeatureReport(0, packet)` receives 64 payload bytes, without an extra ID prefix. Native hidapi prepends a report ID byte; do not transfer that convention into browser packets. The browser transport tolerates a 65-byte response only when the first byte is zero, otherwise requires exactly 64 bytes. [WebHID specification](https://wicg.github.io/webhid/)
 
+The 1K receiver's two vendor interfaces advertise the same descriptor, but a passive GET on the attached receiver returned a 64-byte payload on interface 3 and a one-byte payload on interface 2. Before sending any command to a `5402` candidate, the client now checks its passive response length with a deadline. Short/invalid reports are skipped. A valid length, including an all-zero packet, is only a routing check: fresh polling and paired-identity requests are still required. No browser candidate position is assumed to be a USB interface number.
+
 Commands are serialized. After one SET_FEATURE, poll GET_FEATURE every 20 ms for at most 1.2 s; do not resend a pending request. Match completion status, category, register, nonzero profile, and command-specific stage/button discriminator. Verify checksum before using a reply. The DPI bulk response legitimately changes sub-register `15` to `21`, so sub is not universally compared. Timing and stale replies are documented in the [1K dongle driver](https://github.com/packerlschupfer/pulsar-mouse-linux/blob/f110422b52d7ef1e91d84ca02c4da512bf7dd06d/src/pulsar_mouse/drivers/xlite_v4_wireless.py) and [8K transport](https://github.com/packerlschupfer/pulsar-mouse-linux/blob/f110422b52d7ef1e91d84ca02c4da512bf7dd06d/src/pulsar_mouse/drivers/feinmann8k.py).
+
+A matching, checksum-valid status `05` is terminal, not pending. Native `MainForm.cs` lines 613 and 7535 mark the device offline for this status; the web client reports that the receiver did not receive a mouse response without retrying the command. It does not infer whether sleep, pairing, power or another link issue caused it. USB-level SET_REPORT failure is a separate transport error.
 
 ## Registers
 

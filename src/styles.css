@@ -428,6 +428,35 @@ main {
 .callout.warning > svg {
   color: #c29633;
 }
+.connection-attempts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.connection-attempts li {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+.connection-attempts li > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12px;
+}
+.connection-attempts span {
+  color: var(--muted);
+}
+.connection-attempts p {
+  color: #ae4c40;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 8px 0 0;
+}
 .workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 221px;

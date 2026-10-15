@@ -120,6 +120,13 @@ const buttonNames: Record<number, string> = {
   5: "侧键 · 前进",
   11: "底部 DPI 键",
 };
+const connectionPhaseLabels = {
+  open: "打开设备",
+  probe: "检查报告长度",
+  polling: "读取回报率",
+  identity: "校验配对型号",
+  connected: "连接成功",
+};
 const rgbHex = (color: Rgb) =>
   "#" + color.map((v) => v.toString(16).padStart(2, "0")).join("");
 const hexRgb = (color: string): Rgb => [
@@ -1990,9 +1997,48 @@ export default function App() {
                       </div>
                     </dl>
                     <p className="hint">
-                      配置接口和接收器配对型号会通过只读查询识别。无线连接前请开启鼠标并确认能移动光标。
+                      1K
+                      接收器先被动检查报告长度，再通过新的只读查询确认配置通道和配对型号。
                       若连接失败，请关闭其他配置网页或软件，重新插拔接收器后重试。
                     </p>
+                  </Panel>
+                  <Panel
+                    title="最近一次连接尝试"
+                    sub="按浏览器返回的候选通道编号，便于定位失败阶段。"
+                    icon={Activity}
+                  >
+                    <ol className="connection-attempts">
+                      {(clientRef.current?.connectionAttempts ?? []).map(
+                        (attempt) => (
+                          <li key={attempt.candidate}>
+                            <div>
+                              <b>
+                                通道 {attempt.candidate} · {attempt.productName}
+                              </b>
+                              <span>
+                                {connectionPhaseLabels[attempt.phase]}
+                                {attempt.probeLength === undefined
+                                  ? ""
+                                  : ` · ${attempt.probeLength} 字节`}
+                              </span>
+                            </div>
+                            {attempt.error && (
+                              <p>
+                                {attempt.errorName
+                                  ? `${attempt.errorName}: `
+                                  : ""}
+                                {attempt.error}
+                              </p>
+                            )}
+                          </li>
+                        ),
+                      )}
+                    </ol>
+                    {!clientRef.current?.connectionAttempts.length && (
+                      <p className="hint">
+                        连接设备后，这里会保留每个候选通道的结果；连接失败也可导出诊断。
+                      </p>
+                    )}
                   </Panel>
                   <Panel title="功能验证状态" icon={ShieldCheck}>
                     <div className="capability-row">
@@ -2035,6 +2081,10 @@ export default function App() {
                             JSON.stringify(
                               {
                                 device: clientRef.current?.name,
+                                browser: navigator.userAgent,
+                                page: `${location.origin}${location.pathname}`,
+                                connectionAttempts:
+                                  clientRef.current?.connectionAttempts ?? [],
                                 logs: clientRef.current?.logs ?? [],
                               },
                               null,

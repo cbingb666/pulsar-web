@@ -57,6 +57,16 @@ export interface ProtocolLog {
   category: number;
   register: number;
 }
+export interface ConnectionAttempt {
+  /** One-based position in the filtered candidate list, not a USB interface number. */
+  candidate: number;
+  productName: string;
+  productId: number;
+  phase: "open" | "probe" | "polling" | "identity" | "connected";
+  probeLength?: number;
+  errorName?: string;
+  error?: string;
+}
 export interface DeviceMacroSummary {
   id: number;
   name: string;
@@ -115,6 +125,7 @@ export class PulsarHidClient {
   private queue: Promise<unknown> = Promise.resolve();
   private epoch = 0;
   readonly logs: ProtocolLog[] = [];
+  readonly connectionAttempts: ConnectionAttempt[] = [];
   private readonly disconnectListener: EventListener;
   constructor(options: ClientOptions = {}) {
     this.options = options;
@@ -163,16 +174,40 @@ export class PulsarHidClient {
     return this.connectDevices(await this.getGrantedDevices());
   }
   async connectDevices(devices: HidDevice[]): Promise<HidDevice> {
+    this.connectionAttempts.length = 0;
     await this.disconnect();
     const candidates = devices.filter(
       (device) =>
         isSupportedDevice(device) && containsFeature(device.collections),
     );
     let lastError = "";
-    for (const device of candidates) {
+    let lastErrorPriority = -1;
+    for (const [index, device] of candidates.entries()) {
+      const attempt: ConnectionAttempt = {
+        candidate: index + 1,
+        productName: device.productName,
+        productId: device.productId,
+        phase: "open",
+      };
+      this.connectionAttempts.push(attempt);
       try {
         if (!device.opened) await device.open();
+        if (device.productId === 0x5402) {
+          attempt.phase = "probe";
+          const probe = await this.readReceiverProbe(device);
+          attempt.probeLength = probe.byteLength;
+          // Both 1K vendor interfaces advertise 64 bytes, but the unrelated
+          // interface returns only one byte. Do not send commands to it.
+          if (
+            probe.byteLength !== REPORT_SIZE &&
+            !(probe.byteLength === REPORT_SIZE + 1 && probe.getUint8(0) === 0)
+          )
+            throw new Error(`接收器接口报告长度不匹配（${probe.byteLength} 字节）`);
+          // The passive read may contain zeros or an old reply. Only the new
+          // polling and identity requests below can confirm this connection.
+        }
         this.device = device;
+        attempt.phase = "polling";
         // There are two identically-described vendor collections on this mouse.
         // Identify the settings interface using a read-only register query.
         const response = await this.transact(readCommand(1, 9, 2));
@@ -187,6 +222,7 @@ export class PulsarHidClient {
         )
           throw new Error("设备返回了未知轮询率");
         if (device.productId !== 0x3401) {
+          attempt.phase = "identity";
           // Fusion2 receivers are shared across mouse models. The receiver's
           // USB PID alone does not identify the mouse receiving our settings.
           const identity = await this.transact(readCommand(1, 4, 4));
@@ -201,9 +237,17 @@ export class PulsarHidClient {
             );
           }
         }
+        attempt.phase = "connected";
         return device;
       } catch (error) {
-        lastError = error instanceof Error ? error.message : String(error);
+        attempt.errorName = error instanceof Error ? error.name : typeof error;
+        attempt.error = error instanceof Error ? error.message : String(error);
+        const priority =
+          attempt.phase === "polling" || attempt.phase === "identity" ? 1 : 0;
+        if (priority >= lastErrorPriority) {
+          lastError = attempt.error;
+          lastErrorPriority = priority;
+        }
         this.device = null;
         if (device.opened) await device.close().catch(() => undefined);
       }
@@ -216,6 +260,22 @@ export class PulsarHidClient {
     throw new Error(
       `无法读取 Pulsar 配置接口。${recovery}${lastError ? ` ${lastError}` : ""}`,
     );
+  }
+  private async readReceiverProbe(device: HidDevice): Promise<DataView> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        device.receiveFeatureReport(0),
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("接收器接口读取超时，已停止探测")),
+            Math.max(1, this.options.timeoutMs ?? 1200),
+          );
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
   async disconnect(): Promise<void> {
     this.epoch++;
@@ -293,6 +353,21 @@ export class PulsarHidClient {
             ? bytes.slice(1)
             : bytes.slice();
         this.log("in", packet);
+        if (
+          packet.length === REPORT_SIZE &&
+          packet[0] === 5 &&
+          packet[1] === command.category &&
+          packet[2] === command.register
+        ) {
+          const actual = packet[62] | (packet[63] << 8);
+          if (checksum(packet) !== actual)
+            throw new Error("设备响应校验和不匹配，已停止操作");
+          // Fusion treats status 05 as offline, unlike pending status 02.
+          // This ends the request; a setting write must never be resent here.
+          throw new Error(
+            "接收器未收到鼠标响应（状态 05）。请确认鼠标已开启无线模式并移动鼠标唤醒后重试。",
+          );
+        }
         if (
           packet.length === REPORT_SIZE &&
           packet[0] === 4 &&

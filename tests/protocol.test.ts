@@ -59,6 +59,25 @@ function fakeDevice(
   };
   return { device, writes };
 }
+function receiverCandidate(
+  answer: (request: Uint8Array) => Uint8Array | Promise<Uint8Array>,
+) {
+  const fake = fakeDevice(answer);
+  fake.device.productId = 0x5402;
+  fake.device.productName = "1K Dongle";
+  fake.device.collections = [
+    { usagePage: 0xffff, usage: 1, featureReports: [{ reportId: 0 }] },
+  ];
+  return fake;
+}
+function receiverHandshake(request: Uint8Array) {
+  return response(
+    request,
+    request[2] === 0x84
+      ? { 6: 0x10, 7: 0x37, 8: 0x01, 9: 0x34 }
+      : { 7: 8 },
+  );
+}
 test("polling query matches the packet captured from the connected mouse", () => {
   assert.equal(
     Buffer.from(buildPacket(1, 0x89, 2)).toString("hex"),
@@ -168,6 +187,85 @@ test("transport polls the same pending command and discards stale replies", asyn
   assert.equal(fake.writes.length, 1);
   assert.equal(reads, 3);
 });
+test("transport stops on the captured receiver status 05 instead of polling or resending", async () => {
+  const offlineReply = bytes(
+    "05018902000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009100",
+  );
+  let reads = 0;
+  const fake = fakeDevice(() => {
+    reads++;
+    return offlineReply;
+  });
+  fake.device.productId = 0x5402;
+  const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
+  client.device = fake.device;
+  await assert.rejects(
+    client.transact(readCommand(1, 9, 2)),
+    /接收器未收到鼠标响应（状态 05）/,
+  );
+  assert.equal(reads, 1);
+  assert.equal(fake.writes.length, 1);
+});
+test("transport never retries a setting write rejected with receiver status 05", async () => {
+  let reads = 0;
+  const fake = fakeDevice((request) => {
+    reads++;
+    return response(request, { 0: 5 });
+  });
+  fake.device.productId = 0x5402;
+  const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
+  client.device = fake.device;
+  await assert.rejects(
+    client.transact({
+      category: 1,
+      register: 9,
+      sub: 2,
+      profile: 0,
+      payload: [8],
+    }),
+    /接收器未收到鼠标响应（状态 05）/,
+  );
+  assert.equal(reads, 1);
+  assert.equal(fake.writes.length, 1);
+});
+test("transport discards receiver status 05 for an unrelated category or register", async () => {
+  let reads = 0;
+  const fake = fakeDevice((request) => {
+    reads++;
+    return response(
+      request,
+      reads === 1
+        ? { 0: 5, 1: 8 }
+        : reads === 2
+          ? { 0: 5, 2: 0x84 }
+          : { 7: 8 },
+    );
+  });
+  const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 100 });
+  client.device = fake.device;
+  assert.equal((await client.transact(readCommand(1, 9, 2)))[7], 8);
+  assert.equal(reads, 3);
+  assert.equal(fake.writes.length, 1);
+});
+test("transport reports a corrupt status 05 packet as a checksum failure", async () => {
+  let reads = 0;
+  const fake = fakeDevice((request) => {
+    reads++;
+    const reply = response(request, { 0: 5 });
+    reply[63] ^= 1;
+    return reply;
+  });
+  const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
+  client.device = fake.device;
+  await assert.rejects(client.transact(readCommand(1, 9, 2)), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /校验和/);
+    assert.doesNotMatch(error.message, /状态 05/);
+    return true;
+  });
+  assert.equal(reads, 1);
+  assert.equal(fake.writes.length, 1);
+});
 test("transport rejects corrupt checksums and continues serial queue after failure", async () => {
   let count = 0;
   const fake = fakeDevice((request) => {
@@ -274,6 +372,152 @@ test("receiver connection failures explain wireless recovery and retain the caus
     return true;
   });
   assert.equal(client.connected, false);
+});
+test("1K receiver preflight skips short interfaces without SET and handshakes the full interface", async () => {
+  for (const probe of [new Uint8Array(1), new Uint8Array(63), new Uint8Array(66)]) {
+    const short = receiverCandidate(() => probe);
+    const readsAtWriteCounts: number[] = [];
+    const full = receiverCandidate((request) => {
+      readsAtWriteCounts.push(full.writes.length);
+      return full.writes.length === 0
+        ? new Uint8Array(64)
+        : receiverHandshake(request);
+    });
+    const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
+    assert.equal(
+      await client.connectDevices([short.device, full.device]),
+      full.device,
+    );
+    assert.equal(short.writes.length, 0);
+    assert.equal(short.device.opened, false);
+    assert.deepEqual(readsAtWriteCounts, [0, 1, 2]);
+    assert.deepEqual(full.writes.map((packet) => packet[2]), [0x89, 0x84]);
+    assert.deepEqual(
+      client.connectionAttempts.map(({ candidate, phase, probeLength }) => ({
+        candidate,
+        phase,
+        probeLength,
+      })),
+      [
+        { candidate: 1, phase: "probe", probeLength: probe.length },
+        { candidate: 2, phase: "connected", probeLength: 64 },
+      ],
+    );
+    assert.ok(client.connectionAttempts[0].error);
+    await client.disconnect();
+  }
+});
+test("1K receiver preflight accepts a 65-byte report only with its leading zero ID", async () => {
+  for (const prefix of [0, 1]) {
+    const fake = receiverCandidate((request) => {
+      if (fake.writes.length) return receiverHandshake(request);
+      const probe = new Uint8Array(65);
+      probe[0] = prefix;
+      return probe;
+    });
+    const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
+    if (prefix === 0) {
+      assert.equal(await client.connectDevices([fake.device]), fake.device);
+      assert.deepEqual(fake.writes.map((packet) => packet[2]), [0x89, 0x84]);
+      assert.equal(client.connectionAttempts[0].probeLength, 65);
+    } else {
+      await assert.rejects(client.connectDevices([fake.device]), /报告长度/);
+      assert.equal(fake.writes.length, 0);
+      assert.equal(fake.device.opened, false);
+    }
+    await client.disconnect();
+  }
+});
+test("1K receiver preflight cannot accept a cached reply as a fresh handshake", async () => {
+  let reads = 0;
+  const fake = receiverCandidate((request) => {
+    reads++;
+    return reads === 1
+      ? response(buildPacket(1, 0x89, 2), { 7: 8 })
+      : response(request, { 0: 5 });
+  });
+  const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
+  await assert.rejects(client.connectDevices([fake.device]), /状态 05/);
+  assert.deepEqual(fake.writes.map((packet) => packet[2]), [0x89]);
+  assert.equal(reads, 2);
+  assert.equal(client.connected, false);
+  assert.equal(client.connectionAttempts[0].phase, "polling");
+});
+test("1K receiver preflight closes a hanging candidate and continues to the next", async () => {
+  const hung = receiverCandidate(() => new Promise<Uint8Array>(() => {}));
+  const full = receiverCandidate((request) => receiverHandshake(request));
+  const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 25 });
+  assert.equal(await client.connectDevices([hung.device, full.device]), full.device);
+  assert.equal(hung.writes.length, 0);
+  assert.equal(hung.device.opened, false);
+  assert.equal(client.connected, true);
+  assert.equal(client.connectionAttempts[0].phase, "probe");
+  assert.match(client.connectionAttempts[0].error ?? "", /超时/);
+  assert.equal(client.connectionAttempts[1].phase, "connected");
+  await client.disconnect();
+});
+test("1K receiver preflight does not change cable or 8K connection I/O", async () => {
+  for (const productId of [0x3401, 0x5403]) {
+    let reads = 0;
+    const fake = receiverCandidate((request) => {
+      reads++;
+      assert.ok(fake.writes.length > 0);
+      return receiverHandshake(request);
+    });
+    fake.device.productId = productId;
+    const client = new PulsarHidClient();
+    assert.equal(await client.connectDevices([fake.device]), fake.device);
+    assert.equal(reads, productId === 0x3401 ? 1 : 2);
+    assert.equal(client.connectionAttempts[0].probeLength, undefined);
+    assert.equal(client.connectionAttempts[0].phase, "connected");
+    await client.disconnect();
+  }
+});
+test("connection diagnostics retain identity failures and reset for the next connection", async () => {
+  const otherModel = receiverCandidate((request) =>
+    response(request, request[2] === 0x84 ? { 8: 0x09, 9: 0x34 } : { 7: 8 }),
+  );
+  const client = new PulsarHidClient();
+  await assert.rejects(client.connectDevices([otherModel.device]), /返回型号/);
+  assert.equal(client.connectionAttempts.length, 1);
+  assert.equal(client.connectionAttempts[0].phase, "identity");
+  assert.equal(client.connectionAttempts[0].errorName, "Error");
+  assert.match(client.connectionAttempts[0].error ?? "", /返回型号/);
+  const full = receiverCandidate((request) => receiverHandshake(request));
+  await client.connectDevices([full.device]);
+  assert.equal(client.connectionAttempts.length, 1);
+  assert.equal(client.connectionAttempts[0].phase, "connected");
+  assert.equal(client.connectionAttempts[0].error, undefined);
+  await client.disconnect();
+});
+test("connection errors preserve a full receiver interface failure over a later short candidate", async () => {
+  for (const phase of ["polling", "identity"] as const) {
+    const full = receiverCandidate((request) => receiverHandshake(request));
+    const originalSend = full.device.sendFeatureReport;
+    full.device.sendFeatureReport = async function (id, data) {
+      await originalSend.call(this, id, data);
+      const request = new Uint8Array(data as ArrayBuffer);
+      if (request[2] === (phase === "polling" ? 0x89 : 0x84))
+        throw new Error("Failed to write the feature report.");
+    };
+    const short = receiverCandidate(() => new Uint8Array(1));
+    const client = new PulsarHidClient();
+    await assert.rejects(
+      client.connectDevices([full.device, short.device]),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /Failed to write the feature report/);
+        assert.doesNotMatch(error.message, /报告长度/);
+        return true;
+      },
+    );
+    assert.equal(client.connectionAttempts.length, 2);
+    assert.equal(client.connectionAttempts[0].phase, phase);
+    assert.equal(client.connectionAttempts[1].phase, "probe");
+    assert.match(client.connectionAttempts[1].error ?? "", /报告长度/);
+    assert.equal(full.device.opened, false);
+    assert.equal(short.device.opened, false);
+  }
 });
 test("whole settings batch is validated before the first write", async () => {
   const fake = fakeDevice((request) => response(request));
