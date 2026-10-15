@@ -114,4 +114,6 @@ node_modules/.bin/tsx scripts/hardware-client-smoke.ts --product-id=0x5402 --wri
 
 生产客户端现对 1K 使用首次 GET 前 30 ms 等待（固件查询 100 ms），保留后续 pending 轮询；身份查询仅在发送失败、连接仍有效时允许初次加最多 3 次恢复查询。收到错误响应、型号不符、接收失败、超时或断连不会重试，普通设置写入也不重试。新增 11 项测试验证等待位置、上限、错误分类和断连取消。
 
-更新后的生产 TypeScript 客户端完成真实 1K 完整只读快照：`.local/hardware-client-2026-10-15T20-47-02-651Z.json`，`ok: true`、`identityTries: 1`、`warnings: []`，固件 `00.00.10.16`、活动配置 1、回报率 1000 Hz。日志中配置写入命令数为 0。本次完整读取没有触发身份查询恢复；恢复分支由自动测试覆盖。独立 Chrome 更新后的连接结果仍待验证。
+更新后的生产 TypeScript 客户端完成真实 1K 完整只读快照：`.local/hardware-client-2026-10-15T20-47-02-651Z.json`，`ok: true`、`identityTries: 1`、`warnings: []`，固件 `00.00.10.16`、活动配置 1、回报率 1000 Hz。日志中配置写入命令数为 0。本次完整读取没有触发身份查询恢复；恢复分支由自动测试覆盖。
+
+2026-10-16（Asia/Shanghai），提交 `a7131bf` 的 Pages 部署成功，线上 JavaScript 与本地生产构建 SHA-256 一致。用户按独立 Chrome / Edge 打开该版本并连接 1K Dongle 的验证步骤，确认“连接成功并显示配置”。这验证了本次浏览器连接问题已恢复；未据此宣称所有设备状态下的根因或配置写入均已重新验证。
