@@ -106,4 +106,4 @@ node_modules/.bin/tsx scripts/hardware-client-smoke.ts --write-test
 node_modules/.bin/tsx scripts/hardware-client-smoke.ts --product-id=0x5402
 ```
 
-原版程序及反编译源码不包含在构建产物中。`public/assets/` 的鼠标和品牌图片来自用户提供的软件，用于界面复现；权利仍属于原权利人，本项目不授予这些资源的再分发权利。开源参考实现的 MIT 声明保留在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+原版程序及反编译源码不包含在构建产物中。`public/assets/` 的鼠标和品牌图片、`public/favicon.ico` 的应用图标来自用户提供的软件，用于界面复现；权利仍属于原权利人，本项目不授予这些资源的再分发权利。开源参考实现的 MIT 声明保留在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
