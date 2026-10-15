@@ -1,6 +1,6 @@
 # Pulsar Fusion Web
 
-针对 **Pulsar Xlite v4 Mini** 的本地 Web 配置工具，使用 Chrome / Edge 的 WebHID 直接访问鼠标。基于用户提供的 Fusion 1.0.5.4 安装包静态解包、.NET 反编译及已连接鼠标的 HID 报文验证。没有执行 Windows 安装程序。
+针对 **Pulsar Xlite v4 Mini** 的 Web 配置工具，支持本地运行和 GitHub Pages，使用 Chrome / Edge 的 WebHID 直接访问鼠标。基于用户提供的 Fusion 1.0.5.4 安装包静态解包、.NET 反编译及已连接鼠标的 HID 报文验证。没有执行 Windows 安装程序。
 
 ## 启动
 
@@ -18,6 +18,23 @@ npm run preview
 ```
 
 生产文件位于 `dist/`，可通过 HTTPS 静态托管。无需账号、服务端或本地驱动桥接程序。配置和本地宏存储于当前浏览器；浏览器授权与存储按站点隔离。
+
+## GitHub Pages 自动部署
+
+[部署工作流](.github/workflows/pages.yml) 在推送到 `main` 或手动运行时执行：`npm ci` → 测试 → TypeScript/Vite 构建 → 发布 `dist/`。工作流不运行硬件测试，也不上传安装包、设备备份或反编译目录。
+
+在仓库 **Settings → Pages → Build and deployment** 中选择 **GitHub Actions**。当前项目的默认站点地址为 `https://cbingb666.github.io/pulsar-web/`；工作流使用 Pages 返回的路径构建，图片和 JS/CSS 会遵循同一子路径。本地开发仍使用 `/`。
+
+可在本机检查相同的生产路径：
+
+```sh
+npm run build -- --base /pulsar-web/
+npm run preview -- --base /pulsar-web/
+```
+
+Pages 的 HTTPS 地址可满足 WebHID 的安全上下文要求。首次在部署站点使用时需重新授权鼠标；localhost 中保存的草稿不会自动迁移，可用 JSON 导入导出。
+
+私有仓库能否启用 Pages 取决于 GitHub 套餐，参见 [GitHub 官方要求](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。工作流不会改变仓库可见性。
 
 ## 已实现
 
@@ -67,4 +84,4 @@ python3 scripts/hardware-smoke.py --write-test
 node_modules/.bin/tsx scripts/hardware-client-smoke.ts --write-test
 ```
 
-原版程序及反编译源码不包含在构建产物中。`public/assets/` 的鼠标和品牌图片来自用户提供的软件，仅用于当前本地复现；权利仍属于原权利人。开源参考实现的 MIT 声明保留在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+原版程序及反编译源码不包含在构建产物中。`public/assets/` 的鼠标和品牌图片来自用户提供的软件，用于界面复现；权利仍属于原权利人，本项目不授予这些资源的再分发权利。开源参考实现的 MIT 声明保留在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

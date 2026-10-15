@@ -238,7 +238,7 @@ function MouseFigure({
       <div className="mouse-orbit orbit-two" />
       <img
         className="mouse-product"
-        src="/assets/xlite-v4.png"
+        src={`${import.meta.env.BASE_URL}assets/xlite-v4.png`}
         alt="Pulsar Xlite v4 鼠标"
         onError={(e) => {
           e.currentTarget.style.display = "none";
@@ -677,7 +677,7 @@ export default function App() {
             setTab("home");
           }}
         >
-          <img src="/assets/pulsar-logo.png" alt="pulsar" />
+          <img src={`${import.meta.env.BASE_URL}assets/pulsar-logo.png`} alt="pulsar" />
           <small>
             FUSION <b>WEB</b>
           </small>
