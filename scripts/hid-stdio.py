@@ -2,7 +2,7 @@
 """JSON-lines native adapter for testing the real TypeScript WebHID client.
 
 Default permits read commands only. --write-test permits only macro storage,
-profile selection, sleep/low-power settings, ripple control and button bindings. Reset, firmware,
+profile selection, DPI, polling, sleep/low-power settings, ripple control and button bindings. Reset, firmware,
 pairing and all other write categories are always rejected. No packet encoding
 or response parsing is implemented here; src/hid.ts owns the protocol.
 """
@@ -15,6 +15,9 @@ from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--write-test', action='store_true')
+parser.add_argument('--product-id', type=lambda value: int(value, 0), default=0x3401,
+                    choices=[0x3401, 0x5402, 0x5403])
+parser.add_argument('--interface', type=int, default=3, choices=[2, 3])
 args = parser.parse_args()
 spec = importlib.util.spec_from_file_location('hid_inventory', Path(__file__).with_name('hid-inspect.py'))
 inventory = importlib.util.module_from_spec(spec)
@@ -31,7 +34,7 @@ lib.hid_error.argtypes = [c.c_void_p]
 lib.hid_error.restype = c.c_wchar_p
 lib.hid_darwin_set_open_exclusive(0)
 handle = None
-allowed_writes = {(6, 3), (6, 4), (6, 5), (6, 6), (2, 6), (8, 5), (8, 8), (4, 1), (7, 3)}
+allowed_writes = {(6, 3), (6, 4), (6, 5), (6, 6), (2, 6), (8, 5), (8, 8), (4, 1), (7, 3), (5, 4), (1, 9)}
 
 
 def operate(message):
@@ -40,13 +43,13 @@ def operate(message):
     if command == 'open':
         if handle:
             return {'opened': True}
-        candidates = [row for row in inventory.rows if row['vendor_id'] == 0x3710
-                      and row['product_id'] == 0x3401 and row['interface_number'] == 3]
+        candidates = [row for row in inventory.enumerate_devices(args.product_id)
+                      if row['interface_number'] == args.interface]
         if len(candidates) != 1:
-            raise RuntimeError(f'Expected one 3710:3401 interface 3; found {len(candidates)}')
+            raise RuntimeError(f'Expected one 3710:{args.product_id:04x} interface {args.interface}; found {len(candidates)}')
         handle = lib.hid_open_path(candidates[0]['path'].encode())
         if not handle:
-            raise RuntimeError(lib.hid_error(None) or 'Cannot open wired Xlite V4')
+            raise RuntimeError(lib.hid_error(None) or 'Cannot open Pulsar configuration interface')
         return {'opened': True, 'device': candidates[0]}
     if command == 'close':
         if handle:

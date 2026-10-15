@@ -677,7 +677,10 @@ export default function App() {
             setTab("home");
           }}
         >
-          <img src={`${import.meta.env.BASE_URL}assets/pulsar-logo.png`} alt="pulsar" />
+          <img
+            src={`${import.meta.env.BASE_URL}assets/pulsar-logo.png`}
+            alt="pulsar"
+          />
           <small>
             FUSION <b>WEB</b>
           </small>
@@ -729,7 +732,9 @@ export default function App() {
               {connected
                 ? client().productId === 0x3401
                   ? "USB 已连接"
-                  : "2.4 GHz 已连接"
+                  : client().productId === 0x5402
+                    ? "1K 接收器已连接"
+                    : "8K 接收器已连接"
                 : "设备未连接"}
             </span>
             {connected ? (
@@ -1748,8 +1753,8 @@ export default function App() {
                       </div>
                     </dl>
                     <p className="hint">
-                      两个厂商 HID
-                      接口会通过只读查询识别。若连接失败，请关闭其他鼠标配置软件后重试。
+                      配置接口和接收器配对型号会通过只读查询识别。无线连接前请开启鼠标并确认能移动光标。
+                      若连接失败，请关闭其他配置网页或软件，重新插拔接收器后重试。
                     </p>
                   </Panel>
                   <Panel title="功能验证状态" icon={ShieldCheck}>
@@ -2045,9 +2050,15 @@ export default function App() {
             <span className="eyebrow">GET CONNECTED</span>
             <h2>开始配置你的 Xlite v4</h2>
             <ol>
-              <li>用 USB 线连接鼠标，或插入 1K 无线接收器。</li>
+              <li>
+                用 USB
+                线连接鼠标，或插入无线接收器并开启鼠标，确认能无线移动光标。
+              </li>
               <li>在桌面 Chrome / Edge 打开本页，点击“连接鼠标”。</li>
-              <li>在浏览器选择器中选择 Pulsar 设备，允许访问。</li>
+              <li>
+                在浏览器选择器中选择 Xlite v4；使用 1K 接收器时选择“1K
+                Dongle”，允许访问。
+              </li>
               <li>读取配置后编辑，点击“应用到鼠标”。</li>
             </ol>
             <div className="callout">

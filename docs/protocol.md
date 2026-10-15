@@ -1,6 +1,6 @@
 # Xlite v4 Mini configuration protocol
 
-Investigation date: 2026-10-15. The implementation targets `3710:3401` (cable) and receivers `3710:5402` (1K) / `3710:5403` (8K). Receiver paths are source-derived and not verified on the attached wired device. Firmware-update, bootloader and pairing commands are not implemented. Reset dispatch and macro transfer are derived from the supplied native application and require explicit UI actions.
+Investigation date: 2026-10-15. The implementation targets `3710:3401` (cable) and receivers `3710:5402` (1K) / `3710:5403` (8K). Cable and 1K receiver communication have been verified on the user's Xlite v4 Mini; the 8K path remains source-derived and untested on hardware. Firmware-update, bootloader and pairing commands are not implemented. Reset dispatch and macro transfer are derived from the supplied native application and require explicit UI actions.
 
 ## Evidence and limits
 
@@ -35,6 +35,7 @@ Register column shows write address; read adds `80`. All numbers in the first th
 
 | Category | Register | Sub | Context | Payload / response |
 | --- | --- | --- | --- | --- |
+| 01 | 04 | 04 | 0 | Paired mouse VID u16LE at bytes 6–7, PID u16LE at bytes 8–9; receiver must report `3710:3401` |
 | 01 | 09 | 02 | 0 | Byte 7 = Hz / 125; 1,2,4,8 for cable/1K |
 | 04 | 03 | 03 | 0 | Byte 7 debounce; native setter clears reserved byte 8 (read currently returns 3,3) |
 | 07 | 04 | 02 | 0 | Byte 7 angle snapping boolean |
@@ -56,7 +57,7 @@ Power field derivation and seconds units: [Fusion2Power implementation and its c
 
 LOD uses the newer Fusion2 form from the [8K LOD capture](https://github.com/packerlschupfer/pulsar-mouse-linux/blob/f110422b52d7ef1e91d84ca02c4da512bf7dd06d/src/pulsar_mouse/drivers/feinmann8k.py): selector `02`, raw value in tenths of mm. This device returned `02 0A`, i.e. 1 mm. Never apply the older X2A `[0,0]` / `[1,1]` encoding to this mouse. The official Xlite guide names 0.7, 1 and 2 mm; intermediate tenths come from sibling Fusion2 source and still need model-specific hardware confirmation.
 
-DPI record: `[stage ID, X low, X high, Y low, Y high]`. Values are **direct DPI**, not units of 100. Actual read returned active stage 3 and six stages 400/800/1600/3200/6400/12800. Official model guide specifies 50–32,000 and increments of 10. Preserve each axis independently. [Model-specific manual](https://www.pulsar.gg/cdn/shop/files/Manual_Xlite_v4_Quick_Guide.pdf?v=13613901784141965113)
+DPI record: `[stage ID, X low, X high, Y low, Y high]`. Values are **direct DPI**, not units of 100. Actual read returned active stage 3 and six stages 400/800/1600/3200/6400/12800. The native `GetDPIStageInfo` (2135) reads the bulk block, then separately queries `05/81/02` for the actual active stage. The client follows that sequence and validates the independent stage against the stage count instead of relying only on the bulk block's byte 7. Official model guide specifies 50–32,000 and increments of 10. Preserve each axis independently. [Model-specific manual](https://www.pulsar.gg/cdn/shop/files/Manual_Xlite_v4_Quick_Guide.pdf?v=13613901784141965113)
 
 Physical button IDs 1/2/3/4/5/11 were read successfully. Native `Device.ButtonID` and `MainForm.GetButtonID` establish left/right/wheel/**back/forward**/DPI, correcting the community implementation’s reversed 4/5 labels. Function encodings: mouse=1; keyboard=2 (`arg1` modifier bitmap, `arg2` HID key usage); scroll=3; DPI=9; consumer=13 (little-endian usage); double click=14; disabled=0. Preserve unrecognized bindings until explicitly edited. [Shared HID tables](https://github.com/packerlschupfer/pulsar-mouse-linux/blob/f110422b52d7ef1e91d84ca02c4da512bf7dd06d/src/pulsar_mouse/hid.py)
 
@@ -76,7 +77,7 @@ Physical button IDs 1/2/3/4/5/11 were read successfully. Native `Device.ButtonID
 
 ## Native Fusion 1.0.5.4 recovery
 
-The supplied Inno installer contains a 7z self-extracting payload, which contains the .NET executable `Pulsar Fusion.exe`. ILSpy 9.1 produced local source under `.local/decompiled`; no original executable, decompiled implementation, or proprietary assets are shipped. See `docs/extraction.md` for hashes and extraction details.
+The supplied Inno installer contains a 7z self-extracting payload, which contains the .NET executable `Pulsar Fusion.exe`. ILSpy 9.1 produced local source under `.local/decompiled`; no original executable or decompiled implementation is shipped. The two UI image assets retain their original ownership as described in the README. See `docs/extraction.md` for hashes and extraction details.
 
 The concrete protocol implementation is `.local/decompiled/huAZ2tYGRX2LLl1Kis/QeugLfjKJdKnv2KrF5.cs`, a subclass of `DriverCore.Model.FWProtocolBase`. Its arrays contain a leading report-ID byte, so all native offsets below are translated by subtracting one. This source directly confirms the envelope, profile commands, LOD, power, LED, macro chunking and debounce setter. The web implementation is newly written from the recovered packet behavior.
 
@@ -102,7 +103,7 @@ All macro commands use category 6 and a body beginning at byte 6. In this catego
 | Data write | 06 / 06+length | ID u16, offset u32, data bytes |
 | Delete | 04 / 02 | ID u16 |
 
-Read name once to learn length, then request offset zero with that length (do not assume the first length query also contains all data). Match macro ID and offset to reject stale chunk replies. The browser bounds raw data to 4096 bytes and names to 25 UTF-16 code units, validates before allocation, writes data/name, and reads the entire saved object back. Existing IDs are touched only by an explicit save/delete. Actual device currently reported zero stored macros; this confirms inventory commands but not macro flash writes.
+Read name once to learn length, then request offset zero with that length (do not assume the first length query also contains all data). Match macro ID and offset to reject stale chunk replies. The browser bounds raw data to 4096 bytes and names to 25 UTF-16 code units, validates before allocation, writes data/name, and reads the entire saved object back. Existing IDs are touched only by an explicit save/delete. The initial inventory was empty. Subsequent hardware tests created a temporary 120-byte macro, verified its full contents and name, then deleted it; see the [verification record](verification.md).
 
 Native `MainForm.GetFunctionID` maps macro playback to button type 4 (repeat count in third argument), type 5 (while held), type 6 (toggle). Arguments 1/2 carry macro ID low/high. The TypeScript binding includes optional `a3` so repeat count is not silently lost. Event-byte encoding is documented and tested separately in `src/macro-codec.ts`.
 
@@ -110,7 +111,9 @@ Native `MainForm.GetFunctionID` maps macro playback to button type 4 (repeat cou
 
 `Config/my_models.csv` associates Xlite V4 with `5402` and `5403` receivers. The latter enables rates 2000/4000/8000 Hz, encoded as 16/32/64 at the same polling register. `PulsarHidClient.maxPollingRate` and complete-batch validation reject rates above 1000 on cable or a 1K receiver. The high-rate receiver path has not been exercised on hardware here.
 
-Native `GetDongleIndicator` / `SetDongleIndicator` (3893/3930) use category 8/register 89 or 09/sub 2 with mode at byte 7: 1=connection, 2=battery warning. A device status byte 4 means unsupported. Indicator reads are optional and omitted on the cabled mouse.
+Native `GetDevicePID` (1472) reads category 1/register 84/sub 4. The 1K receiver returned `10 37 01 34` at payload bytes 6–9, identifying the paired mouse as `3710:3401`. Receiver USB IDs are shared across models, so the connection handshake checks this identity before allowing configuration; a successful polling query alone does not establish the mouse model.
+
+Native `GetDongleIndicator` / `SetDongleIndicator` (3893/3930) use category 8/register 89 or 09/sub 2 with mode at byte 7: 1=connection, 2=battery warning. A device status byte 4 means unsupported. The native UI exposes this only for the 8K receiver; indicator reads and writes are restricted to PID `5403`.
 
 Native `ResetProfile` (2251) sends category 2/register 05/sub 1/target profile. MainForm (4563) waits 500 ms then activates that same profile; `resetProfile` follows this sequence and reads the resulting configuration. It is a destructive action and was not exercised in development.
 

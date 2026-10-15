@@ -14,14 +14,21 @@ lib = c.CDLL('/opt/homebrew/lib/libhidapi.dylib')
 lib.hid_enumerate.argtypes = [c.c_ushort, c.c_ushort]
 lib.hid_enumerate.restype = c.POINTER(Info)
 lib.hid_free_enumeration.argtypes = [c.POINTER(Info)]
-head = lib.hid_enumerate(0x3710, 0x3401)
-p = head
-rows = []
-while p:
-    v = p.contents
-    rows.append(dict(path=v.path.decode(), vendor_id=v.vendor_id, product_id=v.product_id,
-                     product=v.product_string, usage_page=v.usage_page, usage=v.usage,
-                     interface_number=v.interface_number))
-    p = v.next
-lib.hid_free_enumeration(head)
-if __name__ == '__main__': print(json.dumps(rows, indent=2))
+def enumerate_devices(product_id=0x3401):
+    head = lib.hid_enumerate(0x3710, product_id)
+    p = head
+    result = []
+    try:
+        while p:
+            v = p.contents
+            result.append(dict(path=v.path.decode(), vendor_id=v.vendor_id, product_id=v.product_id,
+                               product=v.product_string, usage_page=v.usage_page, usage=v.usage,
+                               interface_number=v.interface_number))
+            p = v.next
+    finally:
+        lib.hid_free_enumeration(head)
+    return result
+
+# Keep the original wired diagnostics compatible; the CLI lists all Pulsar devices.
+rows = enumerate_devices()
+if __name__ == '__main__': print(json.dumps(enumerate_devices(0), indent=2))

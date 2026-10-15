@@ -186,6 +186,21 @@ export class PulsarHidClient {
           ].includes(response[7])
         )
           throw new Error("设备返回了未知轮询率");
+        if (device.productId !== 0x3401) {
+          // Fusion2 receivers are shared across mouse models. The receiver's
+          // USB PID alone does not identify the mouse receiving our settings.
+          const identity = await this.transact(readCommand(1, 4, 4));
+          const vendorId = identity[6] | (identity[7] << 8),
+            productId = identity[8] | (identity[9] << 8);
+          if (vendorId !== VENDOR_ID || productId !== 0x3401) {
+            const id = [vendorId, productId]
+              .map((value) => value.toString(16).padStart(4, "0"))
+              .join(":");
+            throw new Error(
+              `接收器尚未确认连接 Xlite v4（返回型号 ${id}），已停止连接。请检查鼠标电源和接收器配对。`,
+            );
+          }
+        }
         return device;
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
@@ -193,8 +208,13 @@ export class PulsarHidClient {
         if (device.opened) await device.close().catch(() => undefined);
       }
     }
+    const recovery = devices.some(
+      (device) => isSupportedDevice(device) && device.productId !== 0x3401,
+    )
+      ? "请确认鼠标已开启无线模式并移动鼠标唤醒，关闭其他配置软件或配置网页后重试；仍失败时重新插拔接收器。"
+      : "请关闭占用设备的软件后重试。";
     throw new Error(
-      `无法读取 Pulsar 配置接口。请关闭占用设备的软件后重试。${lastError ? ` ${lastError}` : ""}`,
+      `无法读取 Pulsar 配置接口。${recovery}${lastError ? ` ${lastError}` : ""}`,
     );
   }
   async disconnect(): Promise<void> {
@@ -335,6 +355,13 @@ export class PulsarHidClient {
   async readProfile(profile = 1): Promise<ProfileSettings> {
     integerInRange(profile, 1, PROFILE_COUNT, "Profile");
     const dpi = parseDpiStages(await this.read(5, 4, 0x15, profile));
+    // Fusion reads the dedicated active-stage register after the bulk table.
+    dpi.activeStage = integerInRange(
+      (await this.read(5, 1, 2, profile))[7],
+      1,
+      dpi.dpiStages.length,
+      "Active DPI stage",
+    );
     const lodReply = await this.read(7, 2, 3, profile);
     // Fusion2's selector 2 uses tenths of millimeters; older X2A enums differ.
     if (lodReply[7] !== 2) throw new Error("设备返回了尚未支持的 LOD 编码");
@@ -374,7 +401,7 @@ export class PulsarHidClient {
     const sleep = await this.read(8, 5, 3),
       low = await this.read(8, 8, 2);
     let receiverIndicator: 1 | 2 | undefined;
-    if (this.productId !== 0x3401) {
+    if (this.productId === 0x5403) {
       try {
         receiverIndicator = await this.readReceiverIndicator();
       } catch {
@@ -596,8 +623,8 @@ export class PulsarHidClient {
       integerInRange(next.power.lowPowerPercent, 5, 100, "Low power threshold");
     if (next.power?.receiverIndicator !== undefined) {
       integerInRange(next.power.receiverIndicator, 1, 2, "Receiver indicator");
-      if (this.productId === 0x3401)
-        throw new Error("接收器灯光设置需要无线接收器");
+      if (this.productId !== 0x5403)
+        throw new Error("接收器灯光设置需要 8K 接收器");
     }
     if (next.global.pollingRate > this.maxPollingRate)
       throw new Error("当前连接最高支持 1000 Hz；更高轮询率需要 8K 接收器");
@@ -649,8 +676,8 @@ export class PulsarHidClient {
       integerInRange(next.lowPowerPercent, 5, 100, "Low power threshold");
     if (next.receiverIndicator !== undefined) {
       integerInRange(next.receiverIndicator, 1, 2, "Receiver indicator");
-      if (this.productId === 0x3401)
-        throw new Error("接收器灯光设置需要无线接收器");
+      if (this.productId !== 0x5403)
+        throw new Error("接收器灯光设置需要 8K 接收器");
     }
     if (profile && (await this.readActiveProfile()) !== profile)
       throw new Error("活动配置已经变化，请重新读取后再应用");
@@ -678,8 +705,8 @@ export class PulsarHidClient {
     return actual;
   }
   async readReceiverIndicator(): Promise<1 | 2> {
-    if (this.productId === 0x3401)
-      throw new Error("接收器灯光设置需要无线接收器");
+    if (this.productId !== 0x5403)
+      throw new Error("接收器灯光设置需要 8K 接收器");
     const reply = await this.read(8, 9, 2);
     return integerInRange(reply[7], 1, 2, "Receiver indicator") as 1 | 2;
   }

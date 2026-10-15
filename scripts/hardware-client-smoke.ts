@@ -1,6 +1,8 @@
 /** Run with `npx tsx scripts/hardware-client-smoke.ts` (read-only by default).
  * --write-test: create/read/delete an unassigned macro, switch profiles/restore,
- * and change sleep + low-power settings/restore. --bind-side additionally tests
+ * change inactive-stage DPI/polling and sleep + low-power settings/restore.
+ * --product-id=0x5402 selects the 1K receiver (default 0x3401, cable).
+ * --bind-side additionally tests
  * temporary macro binding on side button 5, restoring its original assignment.
  * This imports the production client; Python only adapts native feature I/O.
  * Disconnecting power or killing this process can prevent restoration. Durable
@@ -31,13 +33,32 @@ import type {
 } from "../src/protocol";
 
 const args = new Set(process.argv.slice(2));
+const productArgument = [...args].find((arg) =>
+  arg.startsWith("--product-id="),
+);
+const productId = productArgument
+  ? Number(productArgument.slice("--product-id=".length))
+  : 0x3401;
+assert.ok(
+  [0x3401, 0x5402, 0x5403].includes(productId),
+  "Unsupported product ID",
+);
+if (productArgument) args.delete(productArgument);
+const interfaceArgument = [...args].find((arg) =>
+  arg.startsWith("--interface="),
+);
+const interfaceNumber = interfaceArgument
+  ? Number(interfaceArgument.slice("--interface=".length))
+  : 3;
+assert.ok([2, 3].includes(interfaceNumber), "Unsupported interface");
+if (interfaceArgument) args.delete(interfaceArgument);
 if (
   [...args].some(
     (arg) => !["--write-test", "--bind-side", "--macro-only"].includes(arg),
   )
 )
   throw new Error(
-    "Unknown option; use --write-test, --bind-side, --macro-only",
+    "Unknown option; use --product-id=0x3401|0x5402|0x5403, --interface=2|3, --write-test, --bind-side, --macro-only",
   );
 const writeTest = args.has("--write-test"),
   bindSide = args.has("--bind-side");
@@ -56,6 +77,8 @@ const audit: {
   startedAt: string;
   writeTest: boolean;
   bindSide: boolean;
+  productId: number;
+  interfaceNumber: number;
   backupPath: string;
   initial?: DeviceSnapshot;
   targetProfileSnapshot?: DeviceSnapshot;
@@ -71,6 +94,8 @@ const audit: {
   startedAt: new Date().toISOString(),
   writeTest,
   bindSide,
+  productId,
+  interfaceNumber,
   backupPath,
   tests: [],
   logs: [],
@@ -89,8 +114,11 @@ function durable(path: string, value: unknown) {
 const persist = () => durable(output, audit);
 class NativeAdapter implements HidDevice {
   vendorId = 0x3710;
-  productId = 0x3401;
-  productName = "Pulsar Xlite v4 · native test adapter";
+  productId = productId;
+  productName =
+    productId === 0x3401
+      ? "Pulsar Xlite v4 · native test adapter"
+      : "Pulsar receiver · native test adapter";
   opened = false;
   collections = [
     { usagePage: 0xffff, usage: 1, featureReports: [{ reportId: 0 }] },
@@ -111,6 +139,10 @@ class NativeAdapter implements HidDevice {
       "python3",
       [
         resolve(root, "scripts/hid-stdio.py"),
+        "--product-id",
+        String(productId),
+        "--interface",
+        String(interfaceNumber),
         ...(writeTest ? ["--write-test"] : []),
       ],
       { stdio: ["pipe", "pipe", "pipe"] },
@@ -185,7 +217,6 @@ class NativeAdapter implements HidDevice {
 }
 const adapter = new NativeAdapter();
 const client = new PulsarHidClient({
-  timeoutMs: 2500,
   onLog: (entry) => {
     audit.logs.push(entry);
     persist();
@@ -195,11 +226,11 @@ let initial: DeviceSnapshot | undefined,
   temporaryMacroId: number | undefined,
   macroMayExist = false,
   sideMayBeChanged = false,
+  settingsMayBeChanged = false,
   powerMayBeChanged = false,
   profileMayBeChanged = false;
 let targetGlobalBackup:
-  | { profile: number; settings: GlobalSettings }
-  | undefined;
+  { profile: number; settings: GlobalSettings } | undefined;
 const recoveryErrors: string[] = [];
 const ensureConnected = async () => {
   if (!client.connected) await client.connectDevices([adapter]);
@@ -227,6 +258,15 @@ async function restoreSide(profile: ProfileSettings) {
   await ensureConnected();
   await client.writeProfile(profile, await client.readProfile(profile.profile));
   sideMayBeChanged = false;
+}
+async function restoreSettings() {
+  await ensureConnected();
+  const current = await client.readSnapshot(initial!.profile.profile);
+  await client.writeSettings(
+    { profile: initial!.profile, global: initial!.global },
+    current,
+  );
+  settingsMayBeChanged = false;
 }
 async function deleteTemporaryMacro() {
   if (temporaryMacroId === undefined || !macroMayExist) return;
@@ -258,7 +298,13 @@ try {
   const macros = await client.listMacros();
   audit.initial = initial;
   audit.macros = macros;
-  durable(backupPath, { initial, macros, time: new Date().toISOString() });
+  durable(backupPath, {
+    productId,
+    interfaceNumber,
+    initial,
+    macros,
+    time: new Date().toISOString(),
+  });
   persist();
   if (writeTest) {
     temporaryMacroId = Math.max(0, ...macros.map((macro) => macro.id)) + 1;
@@ -307,6 +353,32 @@ try {
       assert.deepEqual(await client.listMacros(), macros);
     });
     if (!args.has("--macro-only"))
+      await check(
+        "inactive-stage DPI/polling write/readback/restore",
+        async () => {
+          const next = structuredClone(initial!);
+          const stage = next.profile.dpiStages.find(
+            (_, index) => index + 1 !== next.profile.activeStage,
+          );
+          assert.ok(stage, "This smoke test needs an inactive DPI stage");
+          stage.x += stage.x < 32000 ? 10 : -10;
+          next.global.pollingRate =
+            next.global.pollingRate === 500 ? 1000 : 500;
+          settingsMayBeChanged = true;
+          persist();
+          try {
+            const actual = await client.writeSettings(
+              { profile: next.profile, global: next.global },
+              initial!,
+            );
+            assert.deepEqual(actual.profile, next.profile);
+            assert.deepEqual(actual.global, next.global);
+          } finally {
+            await restoreSettings();
+          }
+        },
+      );
+    if (!args.has("--macro-only"))
       await check("active profile switch/restore", async () => {
         const target = initial!.profile.profile === 6 ? 1 : 6;
         profileMayBeChanged = true;
@@ -316,6 +388,8 @@ try {
           assert.equal(targetSnapshot.activeProfile, target);
           audit.targetProfileSnapshot = targetSnapshot;
           durable(backupPath, {
+            productId,
+            interfaceNumber,
             initial,
             macros,
             targetProfileSnapshot: targetSnapshot,
@@ -394,6 +468,8 @@ try {
         await ensureConnected();
         await client.setActiveProfile(initial!.profile.profile);
       });
+    if (settingsMayBeChanged)
+      await recover("DPI/polling settings", restoreSettings);
     if (sideMayBeChanged)
       await recover("side button", () => restoreSide(initial!.profile));
     if (powerMayBeChanged)

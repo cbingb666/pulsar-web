@@ -76,6 +76,44 @@ test("real DPI read uses raw uint16 values, one-based stage and 6 stages", () =>
   );
   assert.equal(matchesReply(reply, readCommand(5, 4, 0x15, 1)), true);
 });
+test("profile reads use Fusion's dedicated active-stage register after the bulk DPI read", async () => {
+  // Source-derived behavior: native GetDPIStageInfo reads 5/84, then 5/81.
+  // The disagreement here does not assert the cause of a hardware transient.
+  const fake = fakeDevice((request) => {
+    const command = `${request[1]}:${request[2]}`;
+    if (command === "5:132")
+      return response(bytes(actualDpiReply), { 6: request[6], 7: 6 });
+    if (command === "5:129") return response(request, { 7: 3 });
+    if (command === "7:130") return response(request, { 7: 2, 8: 10 });
+    if (command === "3:131") return response(request, { 8: 255 });
+    if (command === "4:129") return response(request, { 8: 1, 9: 1 });
+    return response(request);
+  });
+  const client = new PulsarHidClient();
+  client.device = fake.device;
+  const profile = await client.readProfile(6);
+  assert.equal(profile.activeStage, 3);
+  assert.equal(profile.dpiStages.length, 6);
+  const query = fake.writes.find(
+    (packet) => packet[1] === 5 && packet[2] === 0x81,
+  );
+  assert.ok(query);
+  assert.equal(query[3], 2);
+  assert.equal(query[6], 6);
+  assert.ok(fake.writes.every((packet) => (packet[2] & 0x80) !== 0));
+});
+test("profile reads reject an active stage outside the device's DPI table", async () => {
+  for (const activeStage of [0, 7]) {
+    const fake = fakeDevice((request) =>
+      request[1] === 5 && request[2] === 0x84
+        ? bytes(actualDpiReply)
+        : response(request, { 7: activeStage }),
+    );
+    const client = new PulsarHidClient();
+    client.device = fake.device;
+    await assert.rejects(client.readProfile(1), /Active DPI stage/);
+  }
+});
 test("DPI packet preserves independent axes and 10 DPI increments", () => {
   const profile = defaultProfile();
   profile.dpiStages = [{ x: 50, y: 32000, color: [1, 2, 3] }];
@@ -171,6 +209,71 @@ test("pending requests cannot continue on a different connection", async () => {
   await client.disconnect();
   await assert.rejects(pending, /连接已经更改/);
   assert.equal(fake.writes.length, 0);
+});
+test("shared receivers reject a paired mouse other than Xlite v4", async () => {
+  for (const [productId, identity, expected] of [
+    [0x5402, [0x10, 0x37, 0x09, 0x34], /Xlite v4.*3710:3409/],
+    [0x5403, [0x34, 0x12, 0x01, 0x34], /Xlite v4.*1234:3401/],
+    [0x5402, [0, 0, 0, 0], /Xlite v4.*0000:0000/],
+  ] as const) {
+    const fake = fakeDevice((request) =>
+      response(
+        request,
+        request[2] === 0x84
+          ? { 6: identity[0], 7: identity[1], 8: identity[2], 9: identity[3] }
+          : { 7: 8 },
+      ),
+    );
+    fake.device.productId = productId;
+    fake.device.collections = [
+      { usagePage: 0xffff, usage: 1, featureReports: [{ reportId: 0 }] },
+    ];
+    const client = new PulsarHidClient();
+    await assert.rejects(client.connectDevices([fake.device]), expected);
+    assert.equal(client.connected, false);
+    assert.equal(fake.device.opened, false);
+    assert.ok(fake.writes.every((packet) => (packet[2] & 0x80) !== 0));
+  }
+});
+test("receivers accept the captured Xlite v4 identity and cable needs no identity relay", async () => {
+  const identityReply = bytes(
+    "01018404000010370134000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000601",
+  );
+  for (const productId of [0x3401, 0x5402, 0x5403]) {
+    const fake = fakeDevice((request) =>
+      request[2] === 0x84 ? identityReply : response(request, { 7: 8 }),
+    );
+    fake.device.productId = productId;
+    fake.device.collections = [
+      { usagePage: 0xffff, usage: 1, featureReports: [{ reportId: 0 }] },
+    ];
+    const client = new PulsarHidClient();
+    assert.equal(await client.connectDevices([fake.device]), fake.device);
+    assert.equal(client.connected, true);
+    assert.ok(fake.writes.every((packet) => (packet[2] & 0x80) !== 0));
+    if (productId === 0x3401)
+      assert.ok(fake.writes.every((packet) => packet[2] !== 0x84));
+    await client.disconnect();
+  }
+});
+test("receiver connection failures explain wireless recovery and retain the cause", async () => {
+  const fake = fakeDevice((request) => response(request));
+  fake.device.productId = 0x5402;
+  fake.device.collections = [
+    { usagePage: 0xffff, usage: 1, featureReports: [{ reportId: 0 }] },
+  ];
+  fake.device.sendFeatureReport = async () => {
+    throw new Error("IOHIDDeviceSetReport failed: 0xE0005000");
+  };
+  const client = new PulsarHidClient();
+  await assert.rejects(client.connectDevices([fake.device]), (error: Error) => {
+    assert.match(error.message, /唤醒/);
+    assert.match(error.message, /其他.*配置/);
+    assert.match(error.message, /重新插拔/);
+    assert.match(error.message, /0xE0005000/);
+    return true;
+  });
+  assert.equal(client.connected, false);
 });
 test("whole settings batch is validated before the first write", async () => {
   const fake = fakeDevice((request) => response(request));
@@ -400,6 +503,91 @@ test("8K rates are rejected on cable before any part of a settings batch writes"
   client.readGlobalSettings = async () => next;
   await client.writeGlobalSettings(next, previous.global);
   assert.equal(fake.writes[0][7], 64);
+});
+test("1K receiver power reads skip the unsupported receiver indicator", async () => {
+  const fake = fakeDevice((request) => {
+    const values: Record<number, Record<number, number>> = {
+      0x81: { 6: 88 },
+      0x83: { 6: 0 },
+      0x85: { 7: 60, 8: 0 },
+      0x88: { 7: 10 },
+      0x89: { 0: 4 },
+    };
+    return response(request, values[request[2]]);
+  });
+  fake.device.productId = 0x5402;
+  const client = new PulsarHidClient();
+  client.device = fake.device;
+  assert.deepEqual(await client.readPower(), {
+    batteryPercent: 88,
+    charging: false,
+    sleepSeconds: 60,
+    lowPowerPercent: 10,
+  });
+  assert.ok(fake.writes.every((packet) => packet[2] !== 0x89));
+  assert.equal(client.connected, true);
+});
+test("direct indicator reads require an 8K receiver before sending a report", async () => {
+  for (const productId of [0x3401, 0x5402]) {
+    const fake = fakeDevice((request) => response(request, { 7: 1 }));
+    fake.device.productId = productId;
+    const client = new PulsarHidClient();
+    client.device = fake.device;
+    await assert.rejects(client.readReceiverIndicator(), /8K/);
+    assert.equal(fake.writes.length, 0);
+  }
+});
+test("power batches reject a 1K indicator request before changing sleep settings", async () => {
+  const fake = fakeDevice((request) => response(request, { 7: 1 }));
+  fake.device.productId = 0x5402;
+  const client = new PulsarHidClient();
+  client.device = fake.device;
+  await assert.rejects(
+    client.writePower({ sleepSeconds: 60, receiverIndicator: 1 }),
+    /8K/,
+  );
+  assert.equal(fake.writes.length, 0);
+});
+test("full settings reject a 1K indicator request before changing a profile", async () => {
+  const fake = fakeDevice((request) => response(request));
+  fake.device.productId = 0x5402;
+  const client = new PulsarHidClient();
+  client.device = fake.device;
+  const previous = {
+    global: defaultGlobal(),
+    profile: defaultProfile(),
+    warnings: [],
+  };
+  await assert.rejects(
+    client.writeSettings(
+      {
+        ...previous,
+        profile: { ...previous.profile, brightness: 123 },
+        power: { batteryPercent: 88, charging: false, receiverIndicator: 1 },
+      },
+      previous,
+    ),
+    /8K/,
+  );
+  assert.equal(fake.writes.length, 0);
+});
+test("8K receiver indicator writes still complete with matching power readback", async () => {
+  let indicator = 1;
+  const fake = fakeDevice((request) => {
+    if (request[1] === 8 && request[2] === 9) indicator = request[7];
+    const values: Record<number, Record<number, number>> = {
+      0x81: { 6: 88 },
+      0x83: { 6: 0 },
+      0x85: { 7: 60, 8: 0 },
+      0x88: { 7: 10 },
+      0x89: { 7: indicator },
+    };
+    return response(request, values[request[2]]);
+  });
+  fake.device.productId = 0x5403;
+  const client = new PulsarHidClient();
+  client.device = fake.device;
+  assert.equal((await client.writePower({ receiverIndicator: 2 })).receiverIndicator, 2);
 });
 test("notification parser respects separate report ID and native one-based DPI stages", () => {
   assert.deepEqual(parseInputReport(5, new Uint8Array([5, 3, 0x40, 6])), {
