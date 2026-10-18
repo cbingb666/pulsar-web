@@ -29,6 +29,14 @@ export interface HidCollection {
     reportId: number;
     items?: { reportSize: number; reportCount: number }[];
   }[];
+  inputReports?: {
+    reportId: number;
+    items?: { reportSize: number; reportCount: number }[];
+  }[];
+  outputReports?: {
+    reportId: number;
+    items?: { reportSize: number; reportCount: number }[];
+  }[];
   children?: HidCollection[];
 }
 export interface HidDevice {
@@ -41,6 +49,9 @@ export interface HidDevice {
   close(): Promise<void>;
   sendFeatureReport(reportId: number, data: BufferSource): Promise<void>;
   receiveFeatureReport(reportId: number): Promise<DataView>;
+  sendReport?(reportId: number, data: BufferSource): Promise<void>;
+  addEventListener?(type: string, callback: EventListener): void;
+  removeEventListener?(type: string, callback: EventListener): void;
 }
 export interface HidApi {
   requestDevice(options: {
@@ -65,6 +76,7 @@ export interface ConnectionAttempt {
   phase: "open" | "probe" | "polling" | "identity" | "connected";
   probeLength?: number;
   identityTries?: number;
+  identityReplyVariant?: "previous-polling-header";
   errorName?: string;
   error?: string;
 }
@@ -91,6 +103,7 @@ class FeatureSendError extends Error {
     this.name = cause instanceof Error ? cause.name : "Error";
   }
 }
+export class UnsupportedCommandError extends Error {}
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === "object")
@@ -131,6 +144,11 @@ export class PulsarHidClient {
   private readonly api: HidApi | undefined;
   private queue: Promise<unknown> = Promise.resolve();
   private epoch = 0;
+  private lastCompletedReply?: {
+    device: HidDevice;
+    epoch: number;
+    bytes: Uint8Array;
+  };
   private disposed = false;
   readonly logs: ProtocolLog[] = [];
   readonly connectionAttempts: ConnectionAttempt[] = [];
@@ -207,12 +225,13 @@ export class PulsarHidClient {
       try {
         if (!device.opened) await device.open();
         this.assertNotDisposed();
-        if (device.productId === 0x5402) {
+        if (device.productId === 0x5402 || device.productId === 0x5403) {
           attempt.phase = "probe";
           const probe = await this.readReceiverProbe(device);
           attempt.probeLength = probe.byteLength;
-          // Both 1K vendor interfaces advertise 64 bytes, but the unrelated
-          // interface returns only one byte. Do not send commands to it.
+          // Both receivers advertise identical vendor descriptors. The 1K
+          // pairing interface returns a short feature report; captured 8K MI02
+          // rejects the GET. Only a 64-byte route may receive settings queries.
           if (
             probe.byteLength !== REPORT_SIZE &&
             !(probe.byteLength === REPORT_SIZE + 1 && probe.getUint8(0) === 0)
@@ -291,7 +310,13 @@ export class PulsarHidClient {
     for (let tries = 1; ; tries++) {
       attempt.identityTries = tries;
       try {
-        return await this.transact(readCommand(1, 4, 4));
+        const reply = await this.exchange(
+          readCommand(1, 4, 4),
+          device.productId === 0x5403 ? "identity-polling" : undefined,
+        );
+        if (device.productId === 0x5403 && reply[2] === 0x89)
+          attempt.identityReplyVariant = "previous-polling-header";
+        return reply;
       } catch (error) {
         if (
           !(error instanceof FeatureSendError) ||
@@ -352,15 +377,54 @@ export class PulsarHidClient {
     this.options.onLog?.(entry);
   }
   transact(command: Command): Promise<Uint8Array> {
+    return this.exchange(command);
+  }
+  private exchange(
+    command: Command,
+    receiverEcho?:
+      | "identity-polling"
+      | "indicator-low-power"
+      | "profile-read"
+      | "settings-read"
+      | "indicator-write",
+  ): Promise<Uint8Array> {
     const epoch = this.epoch;
     const operation = this.queue.then(async () => {
       if (epoch !== this.epoch) throw new Error("设备连接已经更改，请重试");
       const device = this.device;
       if (!device?.opened) throw new Error("请先连接鼠标");
+      const previousReply =
+        this.lastCompletedReply?.device === device &&
+        this.lastCompletedReply.epoch === epoch
+          ? this.lastCompletedReply.bytes
+          : undefined;
+      const recoverCachedRead =
+        receiverEcho !== undefined &&
+        receiverEcho !== "indicator-write" &&
+        (command.register & 0x80) !== 0 &&
+        device.productId === 0x5403;
+      // Native QD7R5XpBRr recovers these getters after repeated pending reads.
+      // This opt-in is never used by public transact or any setting write.
+      const recoverPending =
+        receiverEcho === "profile-read" &&
+        device.productId === 0x5403 &&
+        ((command.category === 5 && [0x81, 0x84].includes(command.register)) ||
+          (command.category === 4 && command.register === 0x81));
       const request = buildCommand(command);
       this.log("out", request);
       const deadline =
-        Date.now() + (command.timeoutMs ?? this.options.timeoutMs ?? 1200);
+        Date.now() +
+        (command.timeoutMs ??
+          this.options.timeoutMs ??
+          (recoverPending ? 3000 : 1200));
+      let pendingPolls = 0;
+      let readRetries = 0;
+      let cachedPolls = 0;
+      let cachedRetries = 0;
+      const assertCurrent = () => {
+        if (this.device !== device || epoch !== this.epoch || !device.opened)
+          throw new Error("设备已断开连接");
+      };
       const io = async <T>(operation: () => Promise<T>): Promise<T> => {
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
@@ -387,18 +451,26 @@ export class PulsarHidClient {
           if (timer !== undefined) clearTimeout(timer);
         }
       };
-      await io(async () => {
-        try {
-          await device.sendFeatureReport(0, request);
-        } catch (error) {
-          throw new FeatureSendError(error);
-        }
-      });
-      if (device.productId === 0x5402) {
-        // Match Fusion's SET-to-first-GET interval on the verified 1K receiver.
+      const send = () =>
+        io(async () => {
+          assertCurrent();
+          try {
+            await device.sendFeatureReport(0, request);
+          } catch (error) {
+            throw new FeatureSendError(error);
+          }
+        });
+      await send();
+      if (device.productId === 0x5402 || device.productId === 0x5403) {
+        // Fusion uses this timing for both receivers; hardware reads confirm it.
         // Subsequent pending polls keep the existing cadence and same request.
         await delay(
-          command.category === 1 && command.register === 0x87 ? 100 : 30,
+          (command.category === 1 && command.register === 0x87) ||
+            (device.productId === 0x5403 &&
+              command.category === 8 &&
+              (command.register === 0x89 || command.register === 9))
+            ? 100
+            : 30,
         );
         if (this.device !== device || epoch !== this.epoch || !device.opened)
           throw new Error("设备已断开连接");
@@ -440,18 +512,117 @@ export class PulsarHidClient {
           packet[0] === 4 &&
           packet[1] === command.category &&
           packet[2] === command.register
-        )
-          throw new Error("设备不支持或拒绝了此操作");
-        if (matchesReply(packet, command)) {
+        ) {
+          if (checksum(packet) !== (packet[62] | (packet[63] << 8)))
+            throw new Error("设备响应校验和不匹配，已停止操作");
+          throw new UnsupportedCommandError("设备不支持或拒绝了此操作");
+        }
+        // Captured 5403 firmware replaces the identity body/length but retains
+        // the preceding response's category/register. Discovery has just read
+        // 01/89, so only its 01/89/04 success variant is accepted here. General
+        // transactions remain strict; checksum and VID/PID validation still run.
+        const identityPollingEcho =
+          receiverEcho === "identity-polling" &&
+          device.productId === 0x5403 &&
+          packet[3] === 4 &&
+          matchesReply(packet, { ...command, register: 0x89 });
+        // The receiver-local LED read has the same partial-header behavior.
+        // Its preceding low-power query has range 5–100; only mode 1/2 may
+        // satisfy this alias, so the unchanged threshold is never accepted.
+        const indicatorLowPowerEcho =
+          receiverEcho === "indicator-low-power" &&
+          device.productId === 0x5403 &&
+          packet[3] === 2 &&
+          (packet[7] === 1 || packet[7] === 2) &&
+          matchesReply(packet, { ...command, register: 0x88 });
+        if (
+          matchesReply(packet, command) ||
+          identityPollingEcho ||
+          indicatorLowPowerEcho
+        ) {
           const actual = packet[62] | (packet[63] << 8);
           if (checksum(packet) !== actual)
             throw new Error("设备响应校验和不匹配，已停止操作");
+          this.lastCompletedReply = { device, epoch, bytes: packet.slice() };
           return packet;
         }
-        await delay(this.options.pollIntervalMs ?? 20);
+        // Captured 5403 LED setters leave the entire prior response unchanged.
+        // This private path only releases the queue for mandatory fresh readback
+        // in writePower. It is not an ACK and must not update the completion cache.
+        if (
+          receiverEcho === "indicator-write" &&
+          device.productId === 0x5403 &&
+          command.category === 8 &&
+          command.register === 9 &&
+          command.sub === 2 &&
+          command.payload?.length === 1 &&
+          [1, 2].includes(command.payload[0]) &&
+          previousReply &&
+          packet.length === REPORT_SIZE &&
+          packet.every((value, index) => value === previousReply[index])
+        )
+          return packet;
+        if (
+          recoverPending &&
+          packet.length === REPORT_SIZE &&
+          packet[0] === 2
+        ) {
+          const pending = packet.slice();
+          pending[0] = 1;
+          if (matchesReply(pending, command)) {
+            const validChecksum =
+              checksum(packet) === (packet[62] | (packet[63] << 8));
+            // Captured firmware also exposes a byte-for-byte request echo with
+            // only status changed to 02, retaining the request's checksum.
+            const exactRequestEcho = packet.every(
+              (value, index) => index === 0 || value === request[index],
+            );
+            if (!validChecksum && !exactRequestEcho)
+              throw new Error("设备响应校验和不匹配，已停止操作");
+            pendingPolls++;
+            if (pendingPolls >= 30) {
+              if (readRetries >= 5 || Date.now() + 100 >= deadline) break;
+              await delay(50);
+              assertCurrent();
+              if (Date.now() + 50 >= deadline) break;
+              this.log("out", request);
+              await send();
+              readRetries++;
+              pendingPolls = 0;
+              await delay(50);
+              assertCurrent();
+              continue;
+            }
+          } else pendingPolls = 0;
+        } else pendingPolls = 0;
+        // A rejected old reply is never data for the current request. If an
+        // internal read keeps receiving the exact previous verified completion,
+        // ask once more; unrelated/malformed replies cannot trigger this path.
+        if (
+          recoverCachedRead &&
+          previousReply &&
+          packet.length === REPORT_SIZE &&
+          packet.every((value, index) => value === previousReply[index])
+        ) {
+          cachedPolls++;
+          if (cachedPolls >= 30) {
+            if (cachedRetries >= 1 || Date.now() + 100 >= deadline) break;
+            await delay(50);
+            assertCurrent();
+            if (Date.now() + 50 >= deadline) break;
+            this.log("out", request);
+            await send();
+            cachedRetries++;
+            cachedPolls = 0;
+            await delay(50);
+            assertCurrent();
+            continue;
+          }
+        } else cachedPolls = 0;
+        await delay(this.options.pollIntervalMs ?? (recoverPending ? 10 : 20));
       }
       throw new Error(
-        `设备响应超时 (${command.category.toString(16)}:${command.register.toString(16)})。请移动鼠标唤醒设备后重试。`,
+        `设备响应超时 (${command.category.toString(16)}:${command.register.toString(16)})。${readRetries + cachedRetries ? `已重新查询 ${readRetries + cachedRetries} 次，` : ""}未收到匹配的完成响应，请重新读取设备；持续失败时请导出诊断。`,
       );
     });
     this.queue = operation.catch(() => undefined);
@@ -465,8 +636,9 @@ export class PulsarHidClient {
     payload: number[] = [],
     echo?: number,
   ) {
-    return this.transact(
+    return this.exchange(
       readCommand(category, register, sub, profile, payload, echo),
+      "settings-read",
     );
   }
   private write(
@@ -496,10 +668,12 @@ export class PulsarHidClient {
   }
   async readProfile(profile = 1): Promise<ProfileSettings> {
     integerInRange(profile, 1, PROFILE_COUNT, "Profile");
-    const dpi = parseDpiStages(await this.read(5, 4, 0x15, profile));
+    const dpi = parseDpiStages(
+      await this.exchange(readCommand(5, 4, 0x15, profile), "profile-read"),
+    );
     // Fusion reads the dedicated active-stage register after the bulk table.
     dpi.activeStage = integerInRange(
-      (await this.read(5, 1, 2, profile))[7],
+      (await this.exchange(readCommand(5, 1, 2, profile), "profile-read"))[7],
       1,
       dpi.dpiStages.length,
       "Active DPI stage",
@@ -516,7 +690,10 @@ export class PulsarHidClient {
     }
     const buttons: ProfileSettings["buttons"] = {};
     for (const button of BUTTON_IDS) {
-      const reply = await this.read(4, 1, 6, profile, [button, 255], button);
+      const reply = await this.exchange(
+        readCommand(4, 1, 6, profile, [button, 255], button),
+        "profile-read",
+      );
       buttons[button] = {
         type: reply[8],
         a1: reply[9],
@@ -539,19 +716,26 @@ export class PulsarHidClient {
   async readPower(): Promise<PowerStatus> {
     const battery = await this.read(8, 1, 1),
       charging = await this.read(8, 3, 1);
-    integerInRange(battery[6], 0, 100, "Battery percent");
+    // Fusion explicitly handles 0xff instead of rejecting the power response.
+    // Keep that sentinel unknown rather than displaying a false 0% battery.
+    const batteryPercent =
+      battery[6] === 0xff
+        ? undefined
+        : integerInRange(battery[6], 0, 100, "Battery percent");
     const sleep = await this.read(8, 5, 3),
       low = await this.read(8, 8, 2);
+    integerInRange(low[7], 5, 100, "Low power threshold");
     let receiverIndicator: 1 | 2 | undefined;
     if (this.productId === 0x5403) {
       try {
-        receiverIndicator = await this.readReceiverIndicator();
-      } catch {
-        /* Some receivers do not have an indicator. */
+        receiverIndicator = await this.readIndicatorAfterLowPower();
+      } catch (error) {
+        // Only a valid unsupported reply establishes an absent indicator.
+        if (!(error instanceof UnsupportedCommandError)) throw error;
       }
     }
     return {
-      batteryPercent: battery[6],
+      batteryPercent,
       charging: !!charging[6],
       sleepSeconds: sleep[7] | (sleep[8] << 8),
       lowPowerPercent: low[7],
@@ -821,18 +1005,51 @@ export class PulsarHidClient {
       if (this.productId !== 0x5403)
         throw new Error("接收器灯光设置需要 8K 接收器");
     }
-    if (profile && (await this.readActiveProfile()) !== profile)
+    const device = this.device,
+      epoch = this.epoch;
+    const assertSession = () => {
+      if (!device?.opened || this.device !== device || this.epoch !== epoch)
+        throw new Error("电源设置期间设备连接已变化，请重新读取设备");
+    };
+    const inSession = async <T>(operation: () => Promise<T>): Promise<T> => {
+      assertSession();
+      const result = await operation();
+      assertSession();
+      return result;
+    };
+    if (
+      profile &&
+      (await inSession(() => this.readActiveProfile())) !== profile
+    )
       throw new Error("活动配置已经变化，请重新读取后再应用");
     if (next.sleepSeconds !== undefined)
-      await this.write(8, 5, 3, profile, [
-        next.sleepSeconds & 255,
-        next.sleepSeconds >> 8,
-      ]);
+      await inSession(() =>
+        this.write(8, 5, 3, profile, [
+          next.sleepSeconds! & 255,
+          next.sleepSeconds! >> 8,
+        ]),
+      );
     if (next.lowPowerPercent !== undefined)
-      await this.write(8, 8, 2, profile, [next.lowPowerPercent]);
-    if (next.receiverIndicator !== undefined)
-      await this.write(8, 9, 2, profile, [next.receiverIndicator]);
-    const actual = await this.readPower();
+      await inSession(() =>
+        this.write(8, 8, 2, profile, [next.lowPowerPercent!]),
+      );
+    if (next.receiverIndicator !== undefined) {
+      // Establish a fresh supported receiver mode before the single setter.
+      await inSession(() => this.readReceiverIndicator());
+      await inSession(() =>
+        this.exchange(
+          {
+            category: 8,
+            register: 9,
+            sub: 2,
+            profile,
+            payload: [next.receiverIndicator!],
+          },
+          "indicator-write",
+        ),
+      );
+    }
+    const actual = await inSession(() => this.readPower());
     if (
       (next.sleepSeconds !== undefined &&
         actual.sleepSeconds !== next.sleepSeconds) ||
@@ -842,14 +1059,30 @@ export class PulsarHidClient {
         actual.receiverIndicator !== next.receiverIndicator)
     )
       throw new Error("电源设置回读不一致，请重新读取设备");
-    if (profile && (await this.readActiveProfile()) !== profile)
+    if (
+      profile &&
+      (await inSession(() => this.readActiveProfile())) !== profile
+    )
       throw new Error("活动配置在写入期间发生变化，请重新读取");
     return actual;
   }
   async readReceiverIndicator(): Promise<1 | 2> {
     if (this.productId !== 0x5403)
       throw new Error("接收器灯光设置需要 8K 接收器");
-    const reply = await this.read(8, 9, 2);
+    // Seed the known header when this API is called outside readPower.
+    integerInRange(
+      (await this.read(8, 8, 2))[7],
+      5,
+      100,
+      "Low power threshold",
+    );
+    return this.readIndicatorAfterLowPower();
+  }
+  private async readIndicatorAfterLowPower(): Promise<1 | 2> {
+    const reply = await this.exchange(
+      readCommand(8, 9, 2),
+      "indicator-low-power",
+    );
     return integerInRange(reply[7], 1, 2, "Receiver indicator") as 1 | 2;
   }
   async resetProfile(profile: number): Promise<DeviceSnapshot> {

@@ -1569,6 +1569,25 @@ main {
   font-size: 11px;
   padding: 15px 0;
 }
+.raw-diagnostics {
+  margin-top: 15px;
+  color: #59738a;
+  font-size: 11px;
+}
+.raw-diagnostics summary {
+  cursor: pointer;
+}
+.raw-diagnostics pre {
+  max-height: 300px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid #edf1f4;
+  border-radius: 7px;
+  background: #f9fbfd;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+}
 .modal-backdrop {
   position: fixed;
   inset: 0;

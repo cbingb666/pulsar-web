@@ -42,6 +42,7 @@ import {
   isWebHidSupported,
   type ProtocolLog,
   type DeviceMacroSummary,
+  type HidDevice,
 } from "./hid";
 import {
   BUTTON_ACTIONS,
@@ -71,6 +72,14 @@ import {
   type WorkspaceProfile,
 } from "./workspace";
 import { MacroEditor } from "./MacroEditor";
+import { ReceiverPairingDialog } from "./ReceiverPairingDialog";
+import {
+  pairReceiver,
+  requestPairingDevices,
+  type PairingLog,
+  type PairingProbe,
+  type PairingResult,
+} from "./receiver-pairing";
 import {
   MACRO_LIMITS,
   createMacro,
@@ -442,6 +451,20 @@ export default function App() {
   const [lockDpi, setLockDpi] = useState(800);
   const [linked, setLinked] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
+  const [showPairing, setShowPairing] = useState(false);
+  const pairingTrigger = useRef<HTMLButtonElement>(null);
+  const [pairingProgress, setPairingProgress] = useState<string | null>(null);
+  const [pairingResult, setPairingResult] = useState<{
+    text: string;
+    error?: boolean;
+  } | null>(null);
+  const pairingAbort = useRef<AbortController | null>(null);
+  const pairingDiagnostics = useRef<{
+    devices: { productName: string; productId: number; collections: unknown }[];
+    logs: PairingLog[];
+    probes: PairingProbe[];
+    result?: string;
+  }>({ devices: [], logs: [], probes: [] });
   const [logVersion, setLogVersion] = useState(0);
   const [macros, setMacros] = useState<Macro[]>(() => {
     try {
@@ -490,6 +513,7 @@ export default function App() {
         return connectDevice(true, c);
     });
     return () => {
+      pairingAbort.current?.abort();
       clientRef.current = null;
       busyRef.current = false;
       void c.dispose();
@@ -668,6 +692,104 @@ export default function App() {
   async function connect() {
     await connectDevice(false);
   }
+  async function startPairing() {
+    if (busyRef.current) return;
+    const c = client();
+    const controller = new AbortController();
+    pairingAbort.current = controller;
+    pairingDiagnostics.current = { devices: [], logs: [], probes: [] };
+    setPairingResult(null);
+    setPairingProgress("请在浏览器选择 8K 接收器并授权…");
+    await run(
+      "配对 8K 接收器",
+      async () => {
+        let receiverResult: PairingResult | undefined;
+        try {
+          // Keep the browser picker within this explicit click's user activation.
+          const devices = await requestPairingDevices();
+          pairingDiagnostics.current.devices = devices.map((device) => ({
+            productName: device.productName,
+            productId: device.productId,
+            collections: device.collections,
+          }));
+          if (controller.signal.aborted)
+            throw new Error("配对未开始，已取消设备选择");
+          let pairingDevice: HidDevice | undefined;
+          await c.disconnect();
+          setConnected(false);
+          setSnapshot(null);
+          setPowerDraft(undefined);
+          setDeviceMacros([]);
+          receiverResult = await pairReceiver(devices, {
+            signal: controller.signal,
+            onSelected: (device) => {
+              pairingDevice = device;
+            },
+            onProbe: (probe) => pairingDiagnostics.current.probes.push(probe),
+            onProgress: setPairingProgress,
+            onLog: (entry) => {
+              pairingDiagnostics.current.logs.push(entry);
+              if (pairingDiagnostics.current.logs.length > 100)
+                pairingDiagnostics.current.logs.shift();
+            },
+          });
+          if (controller.signal.aborted)
+            throw new Error("已停止配对后的连接检查，请重新连接鼠标");
+          setPairingProgress(
+            "接收器已返回配对状态，正在校验 Xlite v4 并读取配置…",
+          );
+          // Only use interfaces from the user's selected receiver, never a different
+          // previously granted dongle. The pairing interface is not a settings route.
+          await c.connectDevices(
+            devices.filter((device) => device !== pairingDevice),
+          );
+          if (controller.signal.aborted)
+            throw new Error("已停止配对后的连接检查，请重新连接鼠标");
+          const s = await c.readSnapshot();
+          if (controller.signal.aborted)
+            throw new Error("已停止配对后的连接检查，请重新连接鼠标");
+          if (clientRef.current !== c) return;
+          setSelectedProfile(s.profile.profile);
+          applySnapshot(s, s.profile.profile, true);
+          let macroWarning = "";
+          try {
+            setDeviceMacros(await c.listMacros());
+          } catch {
+            macroWarning = "设备宏读取失败，可稍后在宏编辑器重试。";
+          }
+          if (!c.connected)
+            throw new Error("读取设备宏期间连接已断开，请重新连接检查状态");
+          if (controller.signal.aborted || clientRef.current !== c)
+            throw new Error("已停止配对后的连接检查，请重新连接鼠标");
+          const preferenceSaved = saveAutoConnect(true);
+          const text = `${receiverResult === "already-paired" ? "接收器已有配对" : "配对成功"}，已确认 Xlite v4 并读取配置。现在可以选择 2000 / 4000 / 8000 Hz；本地草稿已保留。${macroWarning}${preferenceSaved ? "" : "自动连接偏好未能保存。"}`;
+          pairingDiagnostics.current.result = text;
+          setPairingResult({ text });
+          setNotice({ text });
+        } catch (error) {
+          if (clientRef.current !== c) return;
+          const detail = error instanceof Error ? error.message : String(error);
+          const text = receiverResult
+            ? `接收器报告${receiverResult === "already-paired" ? "已有配对" : "配对完成"}，但尚未完成配置连接。请关闭此窗口后点击“连接鼠标”，选择 8K Dongle 重新校验。${detail}`
+            : detail;
+          pairingDiagnostics.current.result = text;
+          setPairingResult({ text, error: true });
+          if (receiverResult || controller.signal.aborted) {
+            // Keep the recovery instruction actionable: failed verification
+            // returns to the disconnected state with the normal connect button.
+            await c.disconnect().catch(() => undefined);
+            setSnapshot(null);
+            setPowerDraft(undefined);
+            setDeviceMacros([]);
+          }
+        } finally {
+          if (pairingAbort.current === controller) pairingAbort.current = null;
+          setPairingProgress(null);
+        }
+      },
+      c,
+    );
+  }
   async function connectDevice(automatic: boolean, c = client()) {
     if (automatic && !shouldAutoConnect()) return;
     await run(
@@ -712,8 +834,12 @@ export default function App() {
         setNotice({ text: "设置已写入鼠标，并通过设备回读验证。" });
       } catch (e) {
         setSnapshot(null);
+        const message = String(e instanceof Error ? e.message : e).replace(
+          /[。.]$/,
+          "",
+        );
         throw new Error(
-          `${e instanceof Error ? e.message : e}。部分设置可能已写入，请先重新读取设备。`,
+          `${message}。部分设置可能已写入，请先重新读取设备。`,
         );
       }
     });
@@ -817,6 +943,17 @@ export default function App() {
     });
   }
 
+  function getDiagnostics() {
+    return {
+      device: clientRef.current?.name,
+      browser: navigator.userAgent,
+      page: `${location.origin}${location.pathname}`,
+      connectionAttempts: clientRef.current?.connectionAttempts ?? [],
+      logs: clientRef.current?.logs ?? [],
+      pairing: pairingDiagnostics.current,
+    };
+  }
+
   function exportCurrent() {
     try {
       download(`Pulsar-${current.name}.json`, exportProfileFile(current));
@@ -854,7 +991,7 @@ export default function App() {
   const currentStage = p.dpiStages[p.activeStage - 1];
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className="sidebar" inert={showPairing}>
         <a
           className="brand"
           href="#"
@@ -906,13 +1043,25 @@ export default function App() {
           </div>
         </div>
       </aside>
-      <div className="main-shell">
+      <div className="main-shell" inert={showPairing}>
         <header className="topbar">
           <div className="breadcrumb">
             设备 <ChevronRight size={14} />
             <b>Xlite v4 Mini</b>
           </div>
           <div className="topbar-right">
+            <button
+              ref={pairingTrigger}
+              className="button compact"
+              disabled={!!busy}
+              onClick={() => {
+                setPairingResult(null);
+                setShowPairing(true);
+              }}
+            >
+              <Link2 size={15} />
+              配对 8K 接收器
+            </button>
             <span className={`connection-label ${connected ? "online" : ""}`}>
               <span />
               {connected
@@ -1082,7 +1231,7 @@ export default function App() {
                       <BatteryCharging size={20} />
                       <small>设备电量</small>
                       <strong>
-                        {snapshot?.power
+                        {snapshot?.power?.batteryPercent !== undefined
                           ? `${snapshot.power.batteryPercent}%`
                           : "—"}
                       </strong>
@@ -1326,7 +1475,8 @@ export default function App() {
                         <span>{1000 / g.pollingRate} ms 报告间隔</span>
                       </div>
                       <p className="hint">
-                        有线和 1K 接收器支持最高 1000 Hz。8K 接收器尚未验证。
+                        有线和 1K 接收器最高 1000 Hz；8K 接收器支持 2000 / 4000
+                        / 8000 Hz。
                       </p>
                     </Panel>
                     <Panel
@@ -1731,7 +1881,7 @@ export default function App() {
                       <BatteryCharging size={20} />
                       <small>剩余电量</small>
                       <strong>
-                        {snapshot?.power
+                        {snapshot?.power?.batteryPercent !== undefined
                           ? `${snapshot.power.batteryPercent}%`
                           : "—"}
                       </strong>
@@ -1815,7 +1965,7 @@ export default function App() {
                             <label className="power-select">
                               <span>
                                 <b>8K 接收器指示灯</b>
-                                <small>按原版协议提供，未连接实机验证</small>
+                                <small>选择连接状态显示或仅低电量提醒</small>
                               </span>
                               <select
                                 aria-label="接收器指示灯模式"
@@ -2029,7 +2179,7 @@ export default function App() {
                       </div>
                     </dl>
                     <p className="hint">
-                      1K
+                      1K / 8K
                       接收器先被动检查报告长度，再通过新的只读查询确认配置通道和配对型号。
                       若连接失败，请关闭其他配置网页或软件，重新插拔接收器后重试。
                     </p>
@@ -2088,6 +2238,14 @@ export default function App() {
                       <b>源程序协议已恢复</b>
                     </div>
                     <div className="capability-row">
+                      <span>8K 接收器配对与配置读取</span>
+                      <b className="positive">已实机验证</b>
+                    </div>
+                    <div className="capability-row">
+                      <span>8K 高回报率和接收器灯光</span>
+                      <b className="pending-text">部分验证，仍有待验收项</b>
+                    </div>
+                    <div className="capability-row">
                       <span>固件升级、宏移动轨迹和实时无线信号</span>
                       <b className="pending-text">尚未实现</b>
                     </div>
@@ -2110,18 +2268,7 @@ export default function App() {
                         onClick={() =>
                           download(
                             "pulsar-diagnostics.json",
-                            JSON.stringify(
-                              {
-                                device: clientRef.current?.name,
-                                browser: navigator.userAgent,
-                                page: `${location.origin}${location.pathname}`,
-                                connectionAttempts:
-                                  clientRef.current?.connectionAttempts ?? [],
-                                logs: clientRef.current?.logs ?? [],
-                              },
-                              null,
-                              2,
-                            ),
+                            JSON.stringify(getDiagnostics(), null, 2),
                           )
                         }
                       >
@@ -2156,6 +2303,10 @@ export default function App() {
                         <p>连接鼠标后，通信记录会显示在这里。</p>
                       )}
                     </div>
+                    <details className="raw-diagnostics">
+                      <summary>完整诊断数据</summary>
+                      <pre>{JSON.stringify(getDiagnostics(), null, 2)}</pre>
+                    </details>
                   </Panel>
                 </>
               )}
@@ -2188,7 +2339,7 @@ export default function App() {
                       : "设备电量"}
                   </span>
                   <b>
-                    {snapshot?.power
+                    {snapshot?.power?.batteryPercent !== undefined
                       ? `${snapshot.power.batteryPercent}%`
                       : "—"}
                   </b>
@@ -2351,6 +2502,27 @@ export default function App() {
           </section>
         </div>
       )}
+      {showPairing && (
+        <ReceiverPairingDialog
+          busy={!!busy}
+          progress={pairingProgress}
+          result={pairingResult}
+          supported={isWebHidSupported()}
+          returnFocusTo={pairingTrigger.current}
+          onStart={() => void startPairing()}
+          onCancel={() => {
+            pairingAbort.current?.abort();
+            setPairingProgress(
+              "正在停止等待；若浏览器设备选择器仍打开，请取消选择。",
+            );
+            // Abort settings verification too, without sending a radio stop command.
+            void client()
+              .disconnect()
+              .catch(() => undefined);
+          }}
+          onClose={() => setShowPairing(false)}
+        />
+      )}
       {showHelp && (
         <div className="modal-backdrop" onClick={() => setShowHelp(false)}>
           <section
@@ -2377,7 +2549,10 @@ export default function App() {
               <li>在桌面 Chrome / Edge 打开本页，点击“连接鼠标”。</li>
               <li>
                 在浏览器选择器中选择 Xlite v4；使用 1K 接收器时选择“1K
-                Dongle”，允许访问。
+                Dongle”，8K 接收器选择“8K Dongle”，允许访问。
+              </li>
+              <li>
+                8K 接收器尚未配对时，先点击顶部“配对 8K 接收器”按提示操作。
               </li>
               <li>性能调整即时生效；DPI 数值完成输入、消抖滑块松开后保存。</li>
               <li>

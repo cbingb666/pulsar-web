@@ -367,23 +367,20 @@ test("1K transport stops before GET when disconnected during its initial wait", 
   assert.equal(reads, 0);
   assert.equal(fake.writes.length, 1);
 });
-test("cable and 8K transport do not acquire the 1K first-GET delay", async (t) => {
+test("cable transport does not acquire the wireless first-GET delay", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
-  for (const productId of [0x3401, 0x5403]) {
-    for (const command of [readCommand(1, 9, 2), readCommand(1, 7, 4)]) {
-      let reads = 0;
-      const fake = fakeDevice((request) => {
-        reads++;
-        return response(request);
-      });
-      fake.device.productId = productId;
-      const client = new PulsarHidClient();
-      client.device = fake.device;
-      const pending = client.transact(command);
-      await flushMicrotasks();
-      assert.equal(reads, 1);
-      await pending;
-    }
+  for (const command of [readCommand(1, 9, 2), readCommand(1, 7, 4)]) {
+    let reads = 0;
+    const fake = fakeDevice((request) => {
+      reads++;
+      return response(request);
+    });
+    const client = new PulsarHidClient();
+    client.device = fake.device;
+    const pending = client.transact(command);
+    await flushMicrotasks();
+    assert.equal(reads, 1);
+    await pending;
   }
 });
 test("transport stops on the captured receiver status 05 instead of polling or resending", async () => {
@@ -670,8 +667,8 @@ test("1K receiver preflight closes a hanging candidate and continues to the next
   assert.equal(client.connectionAttempts[1].phase, "connected");
   await client.disconnect();
 });
-test("1K receiver preflight does not change cable or 8K connection I/O", async () => {
-  for (const productId of [0x3401, 0x5403]) {
+test("receiver preflight does not change cable connection I/O", async () => {
+  for (const productId of [0x3401]) {
     let reads = 0;
     const fake = receiverCandidate((request) => {
       reads++;

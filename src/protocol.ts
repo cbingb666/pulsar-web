@@ -39,7 +39,7 @@ export interface ProfileSettings {
   buttons: Record<number, ButtonBinding>;
 }
 export interface PowerStatus {
-  batteryPercent: number;
+  batteryPercent?: number;
   charging: boolean;
   sleepSeconds?: number;
   lowPowerPercent?: number;
