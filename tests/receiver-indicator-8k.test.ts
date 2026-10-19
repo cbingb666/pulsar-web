@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { withMockClock } from "./helpers/mock-clock";
 import { PulsarHidClient, type HidDevice } from "../src/hid";
 import { checksum, matchesReply, readCommand } from "../src/protocol";
 
@@ -34,7 +35,10 @@ const CAPTURE = [
 const LOW_POWER = CAPTURE[3];
 const INDICATOR = CAPTURE[4];
 
-function capturedPower(indicatorReply: Uint8Array = INDICATOR.response, productId = 0x5403) {
+function capturedPower(
+  indicatorReply: Uint8Array = INDICATOR.response,
+  productId = 0x5403,
+) {
   const reports: Uint8Array[] = [];
   let response = new Uint8Array(64);
   const device: HidDevice = {
@@ -42,22 +46,39 @@ function capturedPower(indicatorReply: Uint8Array = INDICATOR.response, productI
     productId,
     productName: "8K Dongle",
     opened: true,
-    collections: [{ usagePage: 0xffff, usage: 1, featureReports: [{ reportId: 0 }] }],
-    async open() { this.opened = true; },
-    async close() { this.opened = false; },
+    collections: [
+      { usagePage: 0xffff, usage: 1, featureReports: [{ reportId: 0 }] },
+    ],
+    async open() {
+      this.opened = true;
+    },
+    async close() {
+      this.opened = false;
+    },
     async sendFeatureReport(reportId, data) {
       assert.equal(reportId, 0);
       const request = ArrayBuffer.isView(data)
         ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength).slice()
         : new Uint8Array(data).slice();
       reports.push(request);
-      const captured = CAPTURE.find((entry) => Buffer.from(request).equals(entry.request));
-      assert.ok(captured, "Power retrieval sends only the five captured read commands");
-      response = (request[2] === 0x89 ? indicatorReply : captured.response).slice();
+      const captured = CAPTURE.find((entry) =>
+        Buffer.from(request).equals(entry.request),
+      );
+      assert.ok(
+        captured,
+        "Power retrieval sends only the five captured read commands",
+      );
+      response = (
+        request[2] === 0x89 ? indicatorReply : captured.response
+      ).slice();
     },
     async receiveFeatureReport(reportId) {
       assert.equal(reportId, 0);
-      return new DataView(response.buffer, response.byteOffset, response.byteLength);
+      return new DataView(
+        response.buffer,
+        response.byteOffset,
+        response.byteLength,
+      );
     },
   };
   const client = new PulsarHidClient({ timeoutMs: 150, pollIntervalMs: 1 });
@@ -65,51 +86,64 @@ function capturedPower(indicatorReply: Uint8Array = INDICATOR.response, productI
   return { client, reports, device };
 }
 
-test("8K readPower accepts the captured indicator mode after its low-power read", async () => {
-  const fake = capturedPower();
-  try {
-    assert.deepEqual(await fake.client.readPower(), {
-      batteryPercent: 71,
-      charging: false,
-      sleepSeconds: 30,
-      lowPowerPercent: 10,
-      receiverIndicator: 2,
-    });
-    assert.deepEqual(fake.reports, CAPTURE.map(({ request }) => request));
-    assert.deepEqual(fake.client.logs.at(-1)?.bytes, Array.from(INDICATOR.response));
-  } finally {
-    assert.ok(fake.reports.every((packet) => (packet[2] & 0x80) !== 0));
-    await fake.client.dispose();
-  }
+test("8K readPower accepts the captured indicator mode after its low-power read", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = capturedPower();
+    try {
+      assert.deepEqual(await fake.client.readPower(), {
+        batteryPercent: 71,
+        charging: false,
+        sleepSeconds: 30,
+        lowPowerPercent: 10,
+        receiverIndicator: 2,
+      });
+      assert.deepEqual(
+        fake.reports,
+        CAPTURE.map(({ request }) => request),
+      );
+      assert.deepEqual(
+        fake.client.logs.at(-1)?.bytes,
+        Array.from(INDICATOR.response),
+      );
+    } finally {
+      assert.ok(fake.reports.every((packet) => (packet[2] & 0x80) !== 0));
+      await fake.client.dispose();
+    }
+  });
 });
 
-test("a standalone indicator read first establishes the captured low-power header", async () => {
-  const fake = capturedPower();
-  try {
-    assert.equal(await fake.client.readReceiverIndicator(), 2);
-    assert.deepEqual(fake.reports, [LOW_POWER.request, INDICATOR.request]);
-  } finally {
-    await fake.client.dispose();
-  }
+test("a standalone indicator read first establishes the captured low-power header", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = capturedPower();
+    try {
+      assert.equal(await fake.client.readReceiverIndicator(), 2);
+      assert.deepEqual(fake.reports, [LOW_POWER.request, INDICATOR.request]);
+    } finally {
+      await fake.client.dispose();
+    }
+  });
 });
 
 function changedIndicator(patch: Record<number, number>, validChecksum = true) {
   const bytes = INDICATOR.response.slice();
-  for (const [offset, value] of Object.entries(patch)) bytes[Number(offset)] = value;
+  for (const [offset, value] of Object.entries(patch))
+    bytes[Number(offset)] = value;
   const sum = checksum(bytes);
   bytes[62] = (sum & 0xff) ^ (validChecksum ? 0 : 1);
   bytes[63] = sum >> 8;
   return bytes;
 }
 
-test("the captured header compatibility also accepts native indicator mode 1", async () => {
-  const fake = capturedPower(changedIndicator({ 7: 1 }));
-  try {
-    assert.equal(await fake.client.readReceiverIndicator(), 1);
-    assert.deepEqual(fake.reports, [LOW_POWER.request, INDICATOR.request]);
-  } finally {
-    await fake.client.dispose();
-  }
+test("the captured header compatibility also accepts native indicator mode 1", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = capturedPower(changedIndicator({ 7: 1 }));
+    try {
+      assert.equal(await fake.client.readReceiverIndicator(), 1);
+      assert.deepEqual(fake.reports, [LOW_POWER.request, INDICATOR.request]);
+    } finally {
+      await fake.client.dispose();
+    }
+  });
 });
 
 for (const scenario of [
@@ -120,46 +154,67 @@ for (const scenario of [
   { name: "an unsupported alias status", reply: changedIndicator({ 0: 4 }) },
   { name: "a pending alias status", reply: changedIndicator({ 0: 2 }) },
   { name: "an unrelated category", reply: changedIndicator({ 1: 1 }) },
-  { name: "an unrelated retained register", reply: changedIndicator({ 2: 0x85 }) },
+  {
+    name: "an unrelated retained register",
+    reply: changedIndicator({ 2: 0x85 }),
+  },
   { name: "an unrelated sub-register", reply: changedIndicator({ 3: 3 }) },
 ] as const) {
-  test(`indicator compatibility cannot accept ${scenario.name}`, async () => {
-    const fake = capturedPower(scenario.reply);
+  test(`indicator compatibility cannot accept ${scenario.name}`, async (context) => {
+    await withMockClock(context, async () => {
+      const fake = capturedPower(scenario.reply);
+      try {
+        await assert.rejects(fake.client.readReceiverIndicator());
+        assert.deepEqual(fake.reports, [LOW_POWER.request, INDICATOR.request]);
+      } finally {
+        await fake.client.dispose();
+      }
+    });
+  });
+}
+
+test("a corrupt captured alias rejects the whole power read instead of hiding the indicator", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = capturedPower(changedIndicator({}, false));
     try {
-      await assert.rejects(fake.client.readReceiverIndicator());
-      assert.deepEqual(fake.reports, [LOW_POWER.request, INDICATOR.request]);
+      await assert.rejects(fake.client.readPower(), /校验和/);
+      assert.deepEqual(
+        fake.reports,
+        CAPTURE.map(({ request }) => request),
+      );
     } finally {
       await fake.client.dispose();
     }
   });
-}
-
-test("a corrupt captured alias rejects the whole power read instead of hiding the indicator", async () => {
-  const fake = capturedPower(changedIndicator({}, false));
-  try {
-    await assert.rejects(fake.client.readPower(), /校验和/);
-    assert.deepEqual(fake.reports, CAPTURE.map(({ request }) => request));
-  } finally {
-    await fake.client.dispose();
-  }
 });
 
-for (const [productId, label] of [[0x5402, "1K receiver"], [0x3401, "wired mouse"]] as const) {
-  test(`indicator compatibility cannot enable the indicator on a ${label}`, async () => {
-    const fake = capturedPower(INDICATOR.response, productId);
-    try {
-      await assert.rejects(fake.client.readReceiverIndicator(), /需要 8K 接收器/);
-      assert.deepEqual(fake.reports, []);
-      assert.deepEqual(await fake.client.readPower(), {
-        batteryPercent: 71,
-        charging: false,
-        sleepSeconds: 30,
-        lowPowerPercent: 10,
-      });
-      assert.deepEqual(fake.reports, CAPTURE.slice(0, 4).map(({ request }) => request));
-    } finally {
-      await fake.client.dispose();
-    }
+for (const [productId, label] of [
+  [0x5402, "1K receiver"],
+  [0x3401, "wired mouse"],
+] as const) {
+  test(`indicator compatibility cannot enable the indicator on a ${label}`, async (context) => {
+    await withMockClock(context, async () => {
+      const fake = capturedPower(INDICATOR.response, productId);
+      try {
+        await assert.rejects(
+          fake.client.readReceiverIndicator(),
+          /需要 8K 接收器/,
+        );
+        assert.deepEqual(fake.reports, []);
+        assert.deepEqual(await fake.client.readPower(), {
+          batteryPercent: 71,
+          charging: false,
+          sleepSeconds: 30,
+          lowPowerPercent: 10,
+        });
+        assert.deepEqual(
+          fake.reports,
+          CAPTURE.slice(0, 4).map(({ request }) => request),
+        );
+      } finally {
+        await fake.client.dispose();
+      }
+    });
   });
 }
 
@@ -168,13 +223,18 @@ test("generic protocol matching rejects the indicator's captured retained header
 });
 
 for (const productId of [0x5403, 0x5402, 0x3401]) {
-  test(`a generic indicator transaction stays strict for product ${productId.toString(16)}`, async () => {
-    const fake = capturedPower(INDICATOR.response, productId);
-    try {
-      await assert.rejects(fake.client.transact(readCommand(8, 9, 2)), /响应超时 \(8:89\)/);
-      assert.deepEqual(fake.reports, [INDICATOR.request]);
-    } finally {
-      await fake.client.dispose();
-    }
+  test(`a generic indicator transaction stays strict for product ${productId.toString(16)}`, async (context) => {
+    await withMockClock(context, async () => {
+      const fake = capturedPower(INDICATOR.response, productId);
+      try {
+        await assert.rejects(
+          fake.client.transact(readCommand(8, 9, 2)),
+          /响应超时 \(8:89\)/,
+        );
+        assert.deepEqual(fake.reports, [INDICATOR.request]);
+      } finally {
+        await fake.client.dispose();
+      }
+    });
   });
 }

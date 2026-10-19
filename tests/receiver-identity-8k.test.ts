@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { withMockClock } from "./helpers/mock-clock";
 import { PulsarHidClient, type HidDevice } from "../src/hid";
 import { checksum, matchesReply, readCommand } from "../src/protocol";
 
@@ -76,44 +77,54 @@ function capturedReceiver(
   return { device, reports };
 }
 
-test("8K connects through the captured identity response with register 89 and sub 04", async () => {
-  const fake = capturedReceiver();
-  const client = new PulsarHidClient({ timeoutMs: 80, pollIntervalMs: 1 });
-  try {
-    assert.equal(await client.connectDevices([fake.device]), fake.device);
-    assert.equal(client.connected, true);
-    assert.equal(client.connectionAttempts[0].phase, "connected");
-    assert.deepEqual(fake.reports, [POLLING_REQUEST, IDENTITY_REQUEST]);
-    assert.deepEqual(
-      client.logs.find((log) => log.direction === "in" && log.bytes[3] === 4)
-        ?.bytes,
-      Array.from(IDENTITY_REPLY),
-    );
-  } finally {
-    assert.ok(fake.reports.every((packet) => (packet[2] & 0x80) !== 0));
-    await client.dispose();
-  }
+test("8K connects through the captured identity response with register 89 and sub 04", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = capturedReceiver();
+    const client = new PulsarHidClient({ timeoutMs: 80, pollIntervalMs: 1 });
+    try {
+      assert.equal(await client.connectDevices([fake.device]), fake.device);
+      assert.equal(client.connected, true);
+      assert.equal(client.connectionAttempts[0].phase, "connected");
+      assert.deepEqual(fake.reports, [POLLING_REQUEST, IDENTITY_REQUEST]);
+      assert.deepEqual(
+        client.logs.find((log) => log.direction === "in" && log.bytes[3] === 4)
+          ?.bytes,
+        Array.from(IDENTITY_REPLY),
+      );
+    } finally {
+      assert.ok(fake.reports.every((packet) => (packet[2] & 0x80) !== 0));
+      await client.dispose();
+    }
+  });
 });
 
-test("8K connection skips the captured MI02 feature-read failure without sending to that interface", async () => {
-  const pairing = capturedReceiver();
-  pairing.device.receiveFeatureReport = async () => {
-    throw new DOMException("Failed to receive the feature report.", "NotAllowedError");
-  };
-  const settings = capturedReceiver();
-  const client = new PulsarHidClient({ timeoutMs: 80, pollIntervalMs: 1 });
-  try {
-    assert.equal(await client.connectDevices([pairing.device, settings.device]), settings.device);
-    assert.deepEqual(pairing.reports, []);
-    assert.equal(pairing.device.opened, false);
-    assert.deepEqual(settings.reports, [POLLING_REQUEST, IDENTITY_REQUEST]);
-    assert.equal(client.connectionAttempts[0].phase, "probe");
-    assert.equal(client.connectionAttempts[0].errorName, "NotAllowedError");
-    assert.equal(client.connectionAttempts[1].probeLength, 64);
-    assert.equal(client.connectionAttempts[1].phase, "connected");
-  } finally {
-    await client.dispose();
-  }
+test("8K connection skips the captured MI02 feature-read failure without sending to that interface", async (context) => {
+  await withMockClock(context, async () => {
+    const pairing = capturedReceiver();
+    pairing.device.receiveFeatureReport = async () => {
+      throw new DOMException(
+        "Failed to receive the feature report.",
+        "NotAllowedError",
+      );
+    };
+    const settings = capturedReceiver();
+    const client = new PulsarHidClient({ timeoutMs: 80, pollIntervalMs: 1 });
+    try {
+      assert.equal(
+        await client.connectDevices([pairing.device, settings.device]),
+        settings.device,
+      );
+      assert.deepEqual(pairing.reports, []);
+      assert.equal(pairing.device.opened, false);
+      assert.deepEqual(settings.reports, [POLLING_REQUEST, IDENTITY_REQUEST]);
+      assert.equal(client.connectionAttempts[0].phase, "probe");
+      assert.equal(client.connectionAttempts[0].errorName, "NotAllowedError");
+      assert.equal(client.connectionAttempts[1].probeLength, 64);
+      assert.equal(client.connectionAttempts[1].phase, "connected");
+    } finally {
+      await client.dispose();
+    }
+  });
 });
 
 function changedReply(patch: Record<number, number>, validChecksum = true) {
@@ -143,20 +154,22 @@ for (const scenario of [
     expected: /0000:0000/,
   },
 ] as const) {
-  test(`8K alias routing still rejects ${scenario.name} by its returned identity`, async () => {
-    const fake = capturedReceiver(scenario.reply);
-    const client = new PulsarHidClient({ timeoutMs: 80, pollIntervalMs: 1 });
-    try {
-      await assert.rejects(
-        client.connectDevices([fake.device]),
-        scenario.expected,
-      );
-      assert.equal(client.connected, false);
-      assert.equal(fake.device.opened, false);
-      assert.deepEqual(fake.reports, [POLLING_REQUEST, IDENTITY_REQUEST]);
-    } finally {
-      await client.dispose();
-    }
+  test(`8K alias routing still rejects ${scenario.name} by its returned identity`, async (context) => {
+    await withMockClock(context, async () => {
+      const fake = capturedReceiver(scenario.reply);
+      const client = new PulsarHidClient({ timeoutMs: 80, pollIntervalMs: 1 });
+      try {
+        await assert.rejects(
+          client.connectDevices([fake.device]),
+          scenario.expected,
+        );
+        assert.equal(client.connected, false);
+        assert.equal(fake.device.opened, false);
+        assert.deepEqual(fake.reports, [POLLING_REQUEST, IDENTITY_REQUEST]);
+      } finally {
+        await client.dispose();
+      }
+    });
   });
 }
 
@@ -171,33 +184,37 @@ for (const scenario of [
   { name: "a corrupt identity checksum", reply: changedReply({}, false) },
   { name: "a truncated identity reply", reply: IDENTITY_REPLY.slice(0, 63) },
 ] as const) {
-  test(`8K identity compatibility cannot accept ${scenario.name}`, async () => {
-    const fake = capturedReceiver(scenario.reply);
+  test(`8K identity compatibility cannot accept ${scenario.name}`, async (context) => {
+    await withMockClock(context, async () => {
+      const fake = capturedReceiver(scenario.reply);
+      const client = new PulsarHidClient({ timeoutMs: 80, pollIntervalMs: 1 });
+      try {
+        await assert.rejects(client.connectDevices([fake.device]));
+        assert.equal(client.connected, false);
+        assert.equal(fake.device.opened, false);
+        assert.deepEqual(fake.reports, [POLLING_REQUEST, IDENTITY_REQUEST]);
+      } finally {
+        await client.dispose();
+      }
+    });
+  });
+}
+
+test("the 8K identity register exception cannot apply to a 1K receiver", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = capturedReceiver(IDENTITY_REPLY, 0x5402);
     const client = new PulsarHidClient({ timeoutMs: 80, pollIntervalMs: 1 });
     try {
-      await assert.rejects(client.connectDevices([fake.device]));
+      await assert.rejects(
+        client.connectDevices([fake.device]),
+        /响应超时 \(1:84\)/,
+      );
       assert.equal(client.connected, false);
       assert.equal(fake.device.opened, false);
-      assert.deepEqual(fake.reports, [POLLING_REQUEST, IDENTITY_REQUEST]);
     } finally {
       await client.dispose();
     }
   });
-}
-
-test("the 8K identity register exception cannot apply to a 1K receiver", async () => {
-  const fake = capturedReceiver(IDENTITY_REPLY, 0x5402);
-  const client = new PulsarHidClient({ timeoutMs: 80, pollIntervalMs: 1 });
-  try {
-    await assert.rejects(
-      client.connectDevices([fake.device]),
-      /响应超时 \(1:84\)/,
-    );
-    assert.equal(client.connected, false);
-    assert.equal(fake.device.opened, false);
-  } finally {
-    await client.dispose();
-  }
 });
 
 test("generic protocol matching remains strict for the captured identity header", () => {
@@ -208,19 +225,21 @@ for (const [productId, label] of [
   [0x5403, "8K receiver"],
   [0x3401, "wired mouse"],
 ] as const) {
-  test(`a direct identity transaction on an ${label} cannot use the handshake-only header exception`, async () => {
-    const fake = capturedReceiver(IDENTITY_REPLY, productId);
-    const client = new PulsarHidClient({ timeoutMs: 80, pollIntervalMs: 1 });
-    await fake.device.open();
-    client.device = fake.device;
-    try {
-      await assert.rejects(
-        client.transact(readCommand(1, 4, 4)),
-        /响应超时 \(1:84\)/,
-      );
-      assert.deepEqual(fake.reports, [IDENTITY_REQUEST]);
-    } finally {
-      await client.dispose();
-    }
+  test(`a direct identity transaction on an ${label} cannot use the handshake-only header exception`, async (context) => {
+    await withMockClock(context, async () => {
+      const fake = capturedReceiver(IDENTITY_REPLY, productId);
+      const client = new PulsarHidClient({ timeoutMs: 80, pollIntervalMs: 1 });
+      await fake.device.open();
+      client.device = fake.device;
+      try {
+        await assert.rejects(
+          client.transact(readCommand(1, 4, 4)),
+          /响应超时 \(1:84\)/,
+        );
+        assert.deepEqual(fake.reports, [IDENTITY_REQUEST]);
+      } finally {
+        await client.dispose();
+      }
+    });
   });
 }

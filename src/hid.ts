@@ -144,6 +144,9 @@ export class PulsarHidClient {
   private readonly api: HidApi | undefined;
   private queue: Promise<unknown> = Promise.resolve();
   private epoch = 0;
+  private connectionGeneration = 0;
+  private readonly openingDevices = new WeakMap<HidDevice, Promise<void>>();
+  private readonly closingDevices = new WeakMap<HidDevice, Promise<void>>();
   private lastCompletedReply?: {
     device: HidDevice;
     epoch: number;
@@ -158,6 +161,7 @@ export class PulsarHidClient {
     this.api = options.hid ?? getHidApi();
     this.disconnectListener = ((event: Event & { device?: HidDevice }) => {
       if (event.device === this.device) {
+        this.connectionGeneration++;
         this.epoch++;
         this.device = null;
         options.onDisconnect?.();
@@ -206,7 +210,10 @@ export class PulsarHidClient {
   }
   async connectDevices(devices: HidDevice[]): Promise<HidDevice> {
     this.connectionAttempts.length = 0;
-    await this.disconnect();
+    const disconnecting = this.disconnect();
+    const generation = this.connectionGeneration;
+    await disconnecting;
+    this.assertCurrentConnection(generation);
     const candidates = devices.filter(
       (device) =>
         isSupportedDevice(device) && containsFeature(device.collections),
@@ -214,7 +221,7 @@ export class PulsarHidClient {
     let lastError = "";
     let lastErrorPriority = -1;
     for (const [index, device] of candidates.entries()) {
-      this.assertNotDisposed();
+      this.assertCurrentConnection(generation);
       const attempt: ConnectionAttempt = {
         candidate: index + 1,
         productName: device.productName,
@@ -223,8 +230,8 @@ export class PulsarHidClient {
       };
       this.connectionAttempts.push(attempt);
       try {
-        if (!device.opened) await device.open();
-        this.assertNotDisposed();
+        await this.openDevice(device, generation);
+        this.assertCurrentConnection(generation);
         if (device.productId === 0x5402 || device.productId === 0x5403) {
           attempt.phase = "probe";
           const probe = await this.readReceiverProbe(device);
@@ -242,7 +249,7 @@ export class PulsarHidClient {
           // The passive read may contain zeros or an old reply. Only the new
           // polling and identity requests below can confirm this connection.
         }
-        this.assertNotDisposed();
+        this.assertCurrentConnection(generation);
         this.device = device;
         attempt.phase = "polling";
         // There are two identically-described vendor collections on this mouse.
@@ -274,7 +281,7 @@ export class PulsarHidClient {
             );
           }
         }
-        this.assertNotDisposed();
+        this.assertCurrentConnection(generation);
         attempt.phase = "connected";
         return device;
       } catch (error) {
@@ -286,9 +293,12 @@ export class PulsarHidClient {
           lastError = attempt.error;
           lastErrorPriority = priority;
         }
-        this.device = null;
-        if (device.opened) await device.close().catch(() => undefined);
-        if (this.disposed) throw error;
+        const current = generation === this.connectionGeneration;
+        if (current && this.device === device) this.device = null;
+        // A superseding connection may already own this same browser handle.
+        if (device.opened && (current || this.device !== device))
+          await this.closeDevice(device).catch(() => undefined);
+        if (this.disposed || !current) throw error;
       }
     }
     const recovery = devices.some(
@@ -350,19 +360,109 @@ export class PulsarHidClient {
       if (timer !== undefined) clearTimeout(timer);
     }
   }
+  private async boundedHandle<T>(
+    operation: Promise<T>,
+    message: string,
+  ): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        operation,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(message)),
+            Math.max(1, this.options.timeoutMs ?? 1200),
+          );
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+  private async openDevice(
+    device: HidDevice,
+    generation: number,
+  ): Promise<void> {
+    if (this.openingDevices.has(device) || this.closingDevices.has(device))
+      throw new Error("此 HID 通道的上一项操作尚未结束，请重新插拔设备后重试");
+    if (device.opened) return;
+    let abandoned = false;
+    const opening = device.open();
+    // WebHID cannot cancel open(). Keep ownership until any late completion
+    // has been closed; a timed-out handle must never resume its handshake.
+    const cleanup = opening.then(async () => {
+      if (
+        abandoned ||
+        this.disposed ||
+        generation !== this.connectionGeneration
+      )
+        await this.closeDevice(device).catch(() => undefined);
+    });
+    this.openingDevices.set(device, cleanup);
+    const clearOpening = () => {
+      if (this.openingDevices.get(device) === cleanup)
+        this.openingDevices.delete(device);
+    };
+    void cleanup.then(clearOpening, clearOpening);
+    try {
+      await this.boundedHandle(
+        opening,
+        "打开 HID 通道超时，请重新插拔设备后重试",
+      );
+      this.assertCurrentConnection(generation);
+    } catch (error) {
+      abandoned = true;
+      throw error;
+    }
+  }
+  private async closeDevice(device: HidDevice): Promise<void> {
+    let closing = this.closingDevices.get(device);
+    if (!closing) {
+      closing = device.close();
+      this.closingDevices.set(device, closing);
+      const clearClosing = () => {
+        if (this.closingDevices.get(device) === closing)
+          this.closingDevices.delete(device);
+      };
+      void closing.then(clearClosing, clearClosing);
+    }
+    await this.boundedHandle(
+      closing,
+      "关闭 HID 通道超时，连接已停用；请重新插拔设备后重试",
+    );
+  }
   async disconnect(): Promise<void> {
+    this.connectionGeneration++;
     this.epoch++;
     const device = this.device;
     this.device = null;
-    if (device?.opened) await device.close();
+    if (device?.opened) await this.closeDevice(device);
+  }
+  /** Check before handing raw handles to another transport. A failed candidate
+   * can still be closing even after the selected settings handle disconnects.
+   */
+  assertDevicesReleased(devices: HidDevice[]): void {
+    if (
+      devices.some(
+        (device) =>
+          this.device === device ||
+          device.opened ||
+          this.openingDevices.has(device) ||
+          this.closingDevices.has(device),
+      )
+    )
+      throw new Error(
+        "HID 通道尚未完全释放，已停止切换升级模式；请重新插拔鼠标后重试",
+      );
   }
   async dispose(): Promise<void> {
     this.disposed = true;
     this.api?.removeEventListener?.("disconnect", this.disconnectListener);
-    await this.disconnect();
+    await this.disconnect().catch(() => undefined);
   }
-  private assertNotDisposed(): void {
-    if (this.disposed) throw new Error("设备连接已取消");
+  private assertCurrentConnection(generation: number): void {
+    if (this.disposed || generation !== this.connectionGeneration)
+      throw new Error("设备连接已取消");
   }
   private log(direction: "out" | "in", bytes: Uint8Array): void {
     const entry: ProtocolLog = {
@@ -438,7 +538,7 @@ export class PulsarHidClient {
                   if (this.device === device) {
                     this.epoch++;
                     this.device = null;
-                    void device.close().catch(() => undefined);
+                    void this.closeDevice(device).catch(() => undefined);
                     this.options.onDisconnect?.();
                   }
                   reject(new Error("HID I/O 超时，连接已关闭；请重新连接设备"));

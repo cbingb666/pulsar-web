@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { getEventListeners } from "node:events";
 import { setImmediate } from "node:timers/promises";
+import { withMockClock } from "./helpers/mock-clock";
 import type { HidApi, HidCollection, HidDevice } from "../src/hid";
 import {
   buildPairingReport,
@@ -154,29 +155,33 @@ test("pairing start fixture is exactly 64 native payload bytes without a checksu
   assert.deepEqual(buildPairingReport(), START_PACKET);
 });
 
-test("picker requests only the original 3710:5403 receiver without an invented usage filter", async () => {
-  const fake = receiver();
-  assert.deepEqual(await requestPairingDevices(fake.hid), [fake.device]);
-  assert.deepEqual(fake.filters(), [{ vendorId: 0x3710, productId: 0x5403 }]);
-  assert.equal(fake.calls.request, 1);
-  assert.equal(fake.calls.open, 0);
-  assert.deepEqual(fake.reports, []);
+test("picker requests only the original 3710:5403 receiver without an invented usage filter", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = receiver();
+    assert.deepEqual(await requestPairingDevices(fake.hid), [fake.device]);
+    assert.deepEqual(fake.filters(), [{ vendorId: 0x3710, productId: 0x5403 }]);
+    assert.equal(fake.calls.request, 1);
+    assert.equal(fake.calls.open, 0);
+    assert.deepEqual(fake.reports, []);
+  });
 });
 
-test("an empty picker selection and a rejected permission request cannot start pairing", async () => {
-  const fake = receiver();
-  fake.hid.requestDevice = async () => [];
-  await assert.rejects(requestPairingDevices(fake.hid), /未选择/);
-  const denied = new Error("Permission denied");
-  fake.hid.requestDevice = async () => {
-    throw denied;
-  };
-  await assert.rejects(
-    requestPairingDevices(fake.hid),
-    (error) => error === denied,
-  );
-  assert.equal(fake.calls.open, 0);
-  assert.deepEqual(fake.reports, []);
+test("an empty picker selection and a rejected permission request cannot start pairing", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = receiver();
+    fake.hid.requestDevice = async () => [];
+    await assert.rejects(requestPairingDevices(fake.hid), /未选择/);
+    const denied = new Error("Permission denied");
+    fake.hid.requestDevice = async () => {
+      throw denied;
+    };
+    await assert.rejects(
+      requestPairingDevices(fake.hid),
+      (error) => error === denied,
+    );
+    assert.equal(fake.calls.open, 0);
+    assert.deepEqual(fake.reports, []);
+  });
 });
 
 test("selection finds nested vendor reports and deduplicates the same HID object", () => {
@@ -293,358 +298,400 @@ const invalidDescriptors: {
   },
 ];
 for (const { name, change } of invalidDescriptors) {
-  test(`pairing rejects ${name} before opening or sending`, async () => {
-    const fake = receiver();
-    change(fake.device);
-    await assert.rejects(pair(fake), /配对/);
-    assert.equal(fake.calls.open, 0);
-    assert.deepEqual(fake.reports, []);
+  test(`pairing rejects ${name} before opening or sending`, async (context) => {
+    await withMockClock(context, async () => {
+      const fake = receiver();
+      change(fake.device);
+      await assert.rejects(pair(fake), /配对/);
+      assert.equal(fake.calls.open, 0);
+      assert.deepEqual(fake.reports, []);
+    });
   });
 }
 
-test("selection ignores unrelated devices but refuses two matching interfaces without writes", async () => {
-  const first = receiver();
-  const second = receiver();
-  const unrelated = receiver();
-  unrelated.device.productId = 0x5402;
-  assert.equal(
-    selectPairingInterface([unrelated.device, first.device]),
-    first.device,
-  );
-  await assert.rejects(
-    pairReceiver([first.device, second.device], { hid: first.hid }),
-    /无法确认/,
-  );
-  assert.equal(first.calls.open + second.calls.open, 0);
-  assert.deepEqual([...first.reports, ...second.reports], []);
+test("selection ignores unrelated devices but refuses two matching interfaces without writes", async (context) => {
+  await withMockClock(context, async () => {
+    const first = receiver();
+    const second = receiver();
+    const unrelated = receiver();
+    unrelated.device.productId = 0x5402;
+    assert.equal(
+      selectPairingInterface([unrelated.device, first.device]),
+      first.device,
+    );
+    await assert.rejects(
+      pairReceiver([first.device, second.device], { hid: first.hid }),
+      /无法确认/,
+    );
+    assert.equal(first.calls.open + second.calls.open, 0);
+    assert.deepEqual([...first.reports, ...second.reports], []);
+  });
 });
 
 for (const [status, expected] of [
   [2, "already-paired"],
   [3, "paired"],
 ] as const) {
-  test(`input status ${status} settles as ${expected}, even before sendReport completes`, async () => {
-    const fake = receiver();
-    const controller = new AbortController();
-    const logs: PairingLog[] = [];
-    fake.operations.send = async () => {
-      fake.input(status, 0, 64, 5);
-    };
-    assert.equal(
-      await pair(fake, {
-        signal: controller.signal,
-        onLog: (entry) => logs.push(entry),
-      }),
-      expected,
-    );
-    assert.deepEqual(fake.reports, [{ reportId: 0, bytes: START_PACKET }]);
-    assert.deepEqual(
-      logs.map((entry) => entry.direction),
-      ["out", "in"],
-    );
-    assert.deepEqual(logs[0].bytes, Array.from(START_PACKET));
-    assert.equal(logs[1].bytes[6], status);
-    fake.assertClean(controller.signal);
+  test(`input status ${status} settles as ${expected}, even before sendReport completes`, async (context) => {
+    await withMockClock(context, async () => {
+      const fake = receiver();
+      const controller = new AbortController();
+      const logs: PairingLog[] = [];
+      fake.operations.send = async () => {
+        fake.input(status, 0, 64, 5);
+      };
+      assert.equal(
+        await pair(fake, {
+          signal: controller.signal,
+          onLog: (entry) => logs.push(entry),
+        }),
+        expected,
+      );
+      assert.deepEqual(fake.reports, [{ reportId: 0, bytes: START_PACKET }]);
+      assert.deepEqual(
+        logs.map((entry) => entry.direction),
+        ["out", "in"],
+      );
+      assert.deepEqual(logs[0].bytes, Array.from(START_PACKET));
+      assert.equal(logs[1].bytes[6], status);
+      fake.assertClean(controller.signal);
+    });
   });
 }
 
-test("pending and unknown statuses wait for success without polling or resending start", async () => {
-  const fake = receiver();
-  let settled = false;
-  const result = pair(fake).finally(() => {
-    settled = true;
-  });
-  await setImmediate();
-  assert.equal(fake.reports.length, 1);
-  fake.input(0);
-  fake.input(1);
-  fake.input(255);
-  await setImmediate();
-  assert.equal(settled, false);
-  assert.equal(fake.reports.length, 1);
-  fake.input(3);
-  assert.equal(await result, "paired");
-  fake.assertClean();
-});
-
-test("already-paired is only recognized in the initial valid input report", async () => {
-  const fake = receiver();
-  let settled = false;
-  const result = pair(fake).finally(() => {
-    settled = true;
-  });
-  await setImmediate();
-  fake.input(0);
-  fake.input(2);
-  await setImmediate();
-  assert.equal(settled, false);
-  fake.input(3);
-  assert.equal(await result, "paired");
-  assert.equal(fake.reports.length, 1);
-  fake.assertClean();
-});
-
-test("wrong report IDs and truncated/oversized payloads cannot indicate pairing success", async () => {
-  const fake = receiver();
-  let settled = false;
-  const logs: PairingLog[] = [];
-  const result = pair(fake, { onLog: (entry) => logs.push(entry) }).finally(
-    () => {
-      settled = true;
-    },
-  );
-  await setImmediate();
-  fake.input(3, 1);
-  fake.input(3, 0, 7);
-  fake.input(3, 0, 63);
-  fake.input(3, 0, 65);
-  await setImmediate();
-  assert.equal(settled, false);
-  // Preserve unexpected framing in diagnostics without treating it as success.
-  assert.deepEqual(
-    logs.map((entry) => [entry.reportId, entry.bytes.length]),
-    [
-      [0, 64],
-      [1, 64],
-      [0, 7],
-      [0, 63],
-      [0, 65],
-    ],
-  );
-  // Invalid events do not consume the initial valid reply position.
-  fake.input(2);
-  assert.equal(await result, "already-paired");
-  fake.assertClean();
-});
-
-test("input reports arriving while open is still pending cannot finish pairing", async () => {
-  const fake = receiver();
-  const opening = deferred();
-  fake.operations.open = () => opening.promise;
-  const result = pair(fake);
-  fake.input(3);
-  opening.resolve();
-  await setImmediate();
-  assert.equal(fake.reports.length, 1);
-  fake.input(4);
-  await assert.rejects(result, /配对失败/);
-  fake.assertClean();
-});
-
-test("receiver-reported failure terminates pairing without any retry", async () => {
-  const fake = receiver();
-  fake.operations.send = async () => {
-    fake.input(4);
-  };
-  await assert.rejects(pair(fake), /配对失败/);
-  assert.equal(fake.reports.length, 1);
-  fake.assertClean();
-});
-
-test("pairing timeout closes the handle and removes listeners without resending", async () => {
-  const fake = receiver();
-  const controller = new AbortController();
-  await assert.rejects(
-    pair(fake, { signal: controller.signal, timeoutMs: 10 }),
-    /未确认配对结果/,
-  );
-  assert.equal(fake.reports.length, 1);
-  fake.assertClean(controller.signal);
-});
-
-test("an already-open interface is used once and still closed on success", async () => {
-  const fake = receiver();
-  fake.device.opened = true;
-  fake.operations.send = async () => {
-    fake.input(3);
-  };
-  assert.equal(await pair(fake), "paired");
-  assert.equal(fake.calls.open, 0);
-  assert.equal(fake.reports.length, 1);
-  fake.assertClean();
-});
-
-test("an open failure cannot send a pairing command and still cleans up", async () => {
-  const fake = receiver();
-  const failure = new Error("Cannot open device");
-  fake.operations.open = async () => {
-    throw failure;
-  };
-  await assert.rejects(pair(fake), (error) => error === failure);
-  assert.deepEqual(fake.reports, []);
-  fake.assertClean();
-});
-
-for (const ending of ["abort", "timeout"] as const) {
-  test(`${ending} during open sends nothing and closes a late-opened handle again`, async () => {
+test("pending and unknown statuses wait for success without polling or resending start", async (context) => {
+  await withMockClock(context, async () => {
     const fake = receiver();
-    const controller = new AbortController();
+    let settled = false;
+    const result = pair(fake).finally(() => {
+      settled = true;
+    });
+    await setImmediate();
+    assert.equal(fake.reports.length, 1);
+    fake.input(0);
+    fake.input(1);
+    fake.input(255);
+    await setImmediate();
+    assert.equal(settled, false);
+    assert.equal(fake.reports.length, 1);
+    fake.input(3);
+    assert.equal(await result, "paired");
+    fake.assertClean();
+  });
+});
+
+test("already-paired is only recognized in the initial valid input report", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = receiver();
+    let settled = false;
+    const result = pair(fake).finally(() => {
+      settled = true;
+    });
+    await setImmediate();
+    fake.input(0);
+    fake.input(2);
+    await setImmediate();
+    assert.equal(settled, false);
+    fake.input(3);
+    assert.equal(await result, "paired");
+    assert.equal(fake.reports.length, 1);
+    fake.assertClean();
+  });
+});
+
+test("wrong report IDs and truncated/oversized payloads cannot indicate pairing success", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = receiver();
+    let settled = false;
+    const logs: PairingLog[] = [];
+    const result = pair(fake, { onLog: (entry) => logs.push(entry) }).finally(
+      () => {
+        settled = true;
+      },
+    );
+    await setImmediate();
+    fake.input(3, 1);
+    fake.input(3, 0, 7);
+    fake.input(3, 0, 63);
+    fake.input(3, 0, 65);
+    await setImmediate();
+    assert.equal(settled, false);
+    // Preserve unexpected framing in diagnostics without treating it as success.
+    assert.deepEqual(
+      logs.map((entry) => [entry.reportId, entry.bytes.length]),
+      [
+        [0, 64],
+        [1, 64],
+        [0, 7],
+        [0, 63],
+        [0, 65],
+      ],
+    );
+    // Invalid events do not consume the initial valid reply position.
+    fake.input(2);
+    assert.equal(await result, "already-paired");
+    fake.assertClean();
+  });
+});
+
+test("input reports arriving while open is still pending cannot finish pairing", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = receiver();
     const opening = deferred();
     fake.operations.open = () => opening.promise;
-    const result = pair(fake, { signal: controller.signal, ioTimeoutMs: 10 });
-    const rejected = assert.rejects(
-      result,
-      ending === "abort" ? /停止等待配对/ : /I\/O 超时/,
-    );
-    await setImmediate();
-    assert.equal(fake.calls.open, 1);
-    if (ending === "abort") controller.abort();
-    await rejected;
-    assert.deepEqual(fake.reports, []);
-    fake.assertClean(controller.signal);
+    const result = pair(fake);
+    fake.input(3);
     opening.resolve();
     await setImmediate();
-    assert.equal(fake.calls.close, 2);
-    fake.assertClean(controller.signal);
+    assert.equal(fake.reports.length, 1);
+    fake.input(4);
+    await assert.rejects(result, /配对失败/);
+    fake.assertClean();
   });
-}
-
-test("abort before opening cannot issue a pairing command", async () => {
-  const fake = receiver();
-  const controller = new AbortController();
-  controller.abort();
-  await assert.rejects(
-    pair(fake, { signal: controller.signal }),
-    /停止等待配对/,
-  );
-  assert.equal(fake.calls.open, 0);
-  assert.deepEqual(fake.reports, []);
-  fake.assertClean(controller.signal);
 });
 
-for (const callback of ["progress", "log"] as const) {
-  test(`abort in the pre-send ${callback} callback prevents the pairing write`, async () => {
+test("receiver-reported failure terminates pairing without any retry", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = receiver();
+    fake.operations.send = async () => {
+      fake.input(4);
+    };
+    await assert.rejects(pair(fake), /配对失败/);
+    assert.equal(fake.reports.length, 1);
+    fake.assertClean();
+  });
+});
+
+test("pairing timeout closes the handle and removes listeners without resending", async (context) => {
+  await withMockClock(context, async () => {
     const fake = receiver();
     const controller = new AbortController();
     await assert.rejects(
-      pair(fake, {
-        signal: controller.signal,
-        onProgress: (message) => {
-          if (callback === "progress" && message.includes("正在配对"))
-            controller.abort();
-        },
-        onLog: (entry) => {
-          if (callback === "log" && entry.direction === "out")
-            controller.abort();
-        },
-      }),
+      pair(fake, { signal: controller.signal, timeoutMs: 10 }),
+      /未确认配对结果/,
+    );
+    assert.equal(fake.reports.length, 1);
+    fake.assertClean(controller.signal);
+  });
+});
+
+test("an already-open interface is used once and still closed on success", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = receiver();
+    fake.device.opened = true;
+    fake.operations.send = async () => {
+      fake.input(3);
+    };
+    assert.equal(await pair(fake), "paired");
+    assert.equal(fake.calls.open, 0);
+    assert.equal(fake.reports.length, 1);
+    fake.assertClean();
+  });
+});
+
+test("an open failure cannot send a pairing command and still cleans up", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = receiver();
+    const failure = new Error("Cannot open device");
+    fake.operations.open = async () => {
+      throw failure;
+    };
+    await assert.rejects(pair(fake), (error) => error === failure);
+    assert.deepEqual(fake.reports, []);
+    fake.assertClean();
+  });
+});
+
+for (const ending of ["abort", "timeout"] as const) {
+  test(`${ending} during open sends nothing and closes a late-opened handle again`, async (context) => {
+    await withMockClock(context, async () => {
+      const fake = receiver();
+      const controller = new AbortController();
+      const opening = deferred();
+      fake.operations.open = () => opening.promise;
+      const result = pair(fake, { signal: controller.signal, ioTimeoutMs: 10 });
+      const rejected = assert.rejects(
+        result,
+        ending === "abort" ? /停止等待配对/ : /I\/O 超时/,
+      );
+      await setImmediate();
+      assert.equal(fake.calls.open, 1);
+      if (ending === "abort") controller.abort();
+      await rejected;
+      assert.deepEqual(fake.reports, []);
+      fake.assertClean(controller.signal);
+      opening.resolve();
+      await setImmediate();
+      assert.equal(fake.calls.close, 2);
+      fake.assertClean(controller.signal);
+    });
+  });
+}
+
+test("abort before opening cannot issue a pairing command", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = receiver();
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(
+      pair(fake, { signal: controller.signal }),
       /停止等待配对/,
     );
+    assert.equal(fake.calls.open, 0);
     assert.deepEqual(fake.reports, []);
     fake.assertClean(controller.signal);
+  });
+});
+
+for (const callback of ["progress", "log"] as const) {
+  test(`abort in the pre-send ${callback} callback prevents the pairing write`, async (context) => {
+    await withMockClock(context, async () => {
+      const fake = receiver();
+      const controller = new AbortController();
+      await assert.rejects(
+        pair(fake, {
+          signal: controller.signal,
+          onProgress: (message) => {
+            if (callback === "progress" && message.includes("正在配对"))
+              controller.abort();
+          },
+          onLog: (entry) => {
+            if (callback === "log" && entry.direction === "out")
+              controller.abort();
+          },
+        }),
+        /停止等待配对/,
+      );
+      assert.deepEqual(fake.reports, []);
+      fake.assertClean(controller.signal);
+    });
   });
 }
 
 for (const phase of ["send", "waiting"] as const) {
-  test(`abort while ${phase} is pending stops listening and never sends a cancel packet`, async () => {
+  test(`abort while ${phase} is pending stops listening and never sends a cancel packet`, async (context) => {
+    await withMockClock(context, async () => {
+      const fake = receiver();
+      const controller = new AbortController();
+      const sending = deferred();
+      if (phase === "send") fake.operations.send = () => sending.promise;
+      const result = pair(fake, { signal: controller.signal });
+      const rejected = assert.rejects(result, /已发送的配对命令无法撤回/);
+      await setImmediate();
+      assert.equal(fake.reports.length, 1);
+      controller.abort();
+      await rejected;
+      sending.resolve();
+      fake.input(3);
+      assert.equal(fake.reports.length, 1);
+      fake.assertClean(controller.signal);
+    });
+  });
+}
+
+test("disconnect of another device is ignored; target removal ends the pending wait", async (context) => {
+  await withMockClock(context, async () => {
     const fake = receiver();
     const controller = new AbortController();
-    const sending = deferred();
-    if (phase === "send") fake.operations.send = () => sending.promise;
-    const result = pair(fake, { signal: controller.signal });
-    const rejected = assert.rejects(result, /已发送的配对命令无法撤回/);
+    let settled = false;
+    const result = pair(fake, { signal: controller.signal }).finally(() => {
+      settled = true;
+    });
+    const rejected = assert.rejects(result, /已拔出/);
     await setImmediate();
-    assert.equal(fake.reports.length, 1);
-    controller.abort();
+    fake.disconnect(receiver().device);
+    await setImmediate();
+    assert.equal(settled, false);
+    fake.disconnect();
     await rejected;
-    sending.resolve();
-    fake.input(3);
     assert.equal(fake.reports.length, 1);
     fake.assertClean(controller.signal);
   });
-}
-
-test("disconnect of another device is ignored; target removal ends the pending wait", async () => {
-  const fake = receiver();
-  const controller = new AbortController();
-  let settled = false;
-  const result = pair(fake, { signal: controller.signal }).finally(() => {
-    settled = true;
-  });
-  const rejected = assert.rejects(result, /已拔出/);
-  await setImmediate();
-  fake.disconnect(receiver().device);
-  await setImmediate();
-  assert.equal(settled, false);
-  fake.disconnect();
-  await rejected;
-  assert.equal(fake.reports.length, 1);
-  fake.assertClean(controller.signal);
 });
 
-test("disconnect interrupts a hung send and preserves the disconnect error", async () => {
-  const fake = receiver();
-  const controller = new AbortController();
-  const sending = deferred();
-  fake.operations.send = () => sending.promise;
-  const result = pair(fake, { signal: controller.signal, ioTimeoutMs: 30 });
-  const rejected = assert.rejects(result, /8K 接收器已拔出，配对结果未确认/);
-  await setImmediate();
-  assert.equal(fake.reports.length, 1);
-  fake.disconnect();
-  await rejected;
-  fake.assertClean(controller.signal);
-  sending.resolve();
-  await setImmediate();
-  assert.equal(fake.reports.length, 1);
-  fake.assertClean(controller.signal);
+test("disconnect interrupts a hung send and preserves the disconnect error", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = receiver();
+    const controller = new AbortController();
+    const sending = deferred();
+    fake.operations.send = () => sending.promise;
+    const result = pair(fake, { signal: controller.signal, ioTimeoutMs: 30 });
+    const rejected = assert.rejects(result, /8K 接收器已拔出，配对结果未确认/);
+    await setImmediate();
+    assert.equal(fake.reports.length, 1);
+    fake.disconnect();
+    await rejected;
+    fake.assertClean(controller.signal);
+    sending.resolve();
+    await setImmediate();
+    assert.equal(fake.reports.length, 1);
+    fake.assertClean(controller.signal);
+  });
 });
 
 for (const earlySuccess of [false, true]) {
-  test(`send failure is propagated without retry${earlySuccess ? ", even after an early success report" : ""}`, async () => {
-    const fake = receiver();
-    const failure = new Error("Write rejected");
-    fake.operations.send = async () => {
-      if (earlySuccess) fake.input(3);
-      throw failure;
-    };
-    await assert.rejects(pair(fake), (error) => error === failure);
-    assert.equal(fake.reports.length, 1);
-    fake.assertClean();
+  test(`send failure is propagated without retry${earlySuccess ? ", even after an early success report" : ""}`, async (context) => {
+    await withMockClock(context, async () => {
+      const fake = receiver();
+      const failure = new Error("Write rejected");
+      fake.operations.send = async () => {
+        if (earlySuccess) fake.input(3);
+        throw failure;
+      };
+      await assert.rejects(pair(fake), (error) => error === failure);
+      assert.equal(fake.reports.length, 1);
+      fake.assertClean();
+    });
   });
 }
 
-test("a stuck send times out, cleans up and does not resend the start packet", async () => {
-  const fake = receiver();
-  const sending = deferred();
-  fake.operations.send = () => sending.promise;
-  await assert.rejects(pair(fake, { ioTimeoutMs: 10 }), /I\/O 超时/);
-  sending.resolve();
-  assert.equal(fake.reports.length, 1);
-  fake.assertClean();
+test("a stuck send times out, cleans up and does not resend the start packet", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = receiver();
+    const sending = deferred();
+    fake.operations.send = () => sending.promise;
+    await assert.rejects(pair(fake, { ioTimeoutMs: 10 }), /I\/O 超时/);
+    sending.resolve();
+    assert.equal(fake.reports.length, 1);
+    fake.assertClean();
+  });
 });
 
-test("a close rejection does not mask a confirmed result or leak event listeners", async () => {
-  const fake = receiver();
-  fake.operations.send = async () => {
-    fake.input(3);
-  };
-  fake.operations.close = async () => {
-    fake.device.opened = false;
-    throw new Error("Already disconnected");
-  };
-  assert.equal(await pair(fake), "paired");
-  fake.assertClean();
+test("a close rejection does not mask a confirmed result or leak event listeners", async (context) => {
+  await withMockClock(context, async () => {
+    const fake = receiver();
+    fake.operations.send = async () => {
+      fake.input(3);
+    };
+    fake.operations.close = async () => {
+      fake.device.opened = false;
+      throw new Error("Already disconnected");
+    };
+    assert.equal(await pair(fake), "paired");
+    fake.assertClean();
+  });
 });
 
 test(
   "a stuck close cannot keep a confirmed pairing result pending forever",
   { timeout: 1000 },
-  async () => {
-    const fake = receiver();
-    const closing = deferred();
-    const controller = new AbortController();
-    fake.operations.send = async () => {
-      fake.input(3);
-    };
-    fake.operations.close = () => closing.promise;
-    assert.equal(
-      await pair(fake, { signal: controller.signal, ioTimeoutMs: 10 }),
-      "paired",
-    );
-    assert.equal(fake.calls.close, 1);
-    closing.resolve();
-    await setImmediate();
-    fake.assertClean(controller.signal);
+  async (context) => {
+    await withMockClock(context, async () => {
+      const fake = receiver();
+      const closing = deferred();
+      const controller = new AbortController();
+      fake.operations.send = async () => {
+        fake.input(3);
+      };
+      fake.operations.close = () => closing.promise;
+      assert.equal(
+        await pair(fake, { signal: controller.signal, ioTimeoutMs: 10 }),
+        "paired",
+      );
+      assert.equal(fake.calls.close, 1);
+      closing.resolve();
+      await setImmediate();
+      fake.assertClean(controller.signal);
+    });
   },
 );

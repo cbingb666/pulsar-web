@@ -1,4 +1,5 @@
 import test from "node:test";
+import { withMockClock } from "./helpers/mock-clock";
 import assert from "node:assert/strict";
 import {
   buildPacket,
@@ -161,9 +162,10 @@ test("disposing while granted devices are being listed prevents a late connectio
   let resolve!: (devices: HidDevice[]) => void;
   const client = new PulsarHidClient({
     hid: {
-      getDevices: () => new Promise((done) => {
-        resolve = done;
-      }),
+      getDevices: () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
       async requestDevice() {
         assert.fail("unexpected permission prompt");
       },
@@ -180,12 +182,13 @@ test("disposing during device open closes the late handle without sending comman
   const fake = receiverCandidate(receiverHandshake);
   fake.device.opened = false;
   let finishOpen!: () => void;
-  fake.device.open = () => new Promise((resolve) => {
-    finishOpen = () => {
-      fake.device.opened = true;
-      resolve();
-    };
-  });
+  fake.device.open = () =>
+    new Promise((resolve) => {
+      finishOpen = () => {
+        fake.device.opened = true;
+        resolve();
+      };
+    });
   const client = new PulsarHidClient();
   const pending = client.connectDevices([fake.device]);
   await flushMicrotasks();
@@ -289,21 +292,23 @@ test("rejects busy, stale profile, stale button and truncated responses", () => 
   assert.equal(matchesReply(response(packet, { 7: 5 }), command), false);
   assert.equal(matchesReply(response(packet).slice(0, 63), command), false);
 });
-test("transport polls the same pending command and discards stale replies", async () => {
-  let reads = 0;
-  const fake = fakeDevice((request) => {
-    reads++;
-    return response(
-      request,
-      reads === 1 ? { 0: 2 } : reads === 2 ? { 1: 7 } : { 7: 8 },
-    );
+test("transport polls the same pending command and discards stale replies", async (t) => {
+  await withMockClock(t, async () => {
+    let reads = 0;
+    const fake = fakeDevice((request) => {
+      reads++;
+      return response(
+        request,
+        reads === 1 ? { 0: 2 } : reads === 2 ? { 1: 7 } : { 7: 8 },
+      );
+    });
+    const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 100 });
+    client.device = fake.device;
+    const reply = await client.transact(readCommand(1, 9, 2));
+    assert.equal(reply[7], 8);
+    assert.equal(fake.writes.length, 1);
+    assert.equal(reads, 3);
   });
-  const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 100 });
-  client.device = fake.device;
-  const reply = await client.transact(readCommand(1, 9, 2));
-  assert.equal(reply[7], 8);
-  assert.equal(fake.writes.length, 1);
-  assert.equal(reads, 3);
 });
 test("1K transport waits 30 ms before its first GET and polls pending without resending", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
@@ -383,7 +388,8 @@ test("cable transport does not acquire the wireless first-GET delay", async (t) 
     await pending;
   }
 });
-test("transport stops on the captured receiver status 05 instead of polling or resending", async () => {
+test("transport stops on the captured receiver status 05 instead of polling or resending", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
   const offlineReply = bytes(
     "05018902000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009100",
   );
@@ -395,14 +401,18 @@ test("transport stops on the captured receiver status 05 instead of polling or r
   fake.device.productId = 0x5402;
   const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
   client.device = fake.device;
-  await assert.rejects(
+  const rejected = assert.rejects(
     client.transact(readCommand(1, 9, 2)),
     /接收器未收到鼠标响应（状态 05）/,
   );
+  await flushMicrotasks();
+  t.mock.timers.tick(30);
+  await rejected;
   assert.equal(reads, 1);
   assert.equal(fake.writes.length, 1);
 });
-test("transport never retries a setting write rejected with receiver status 05", async () => {
+test("transport never retries a setting write rejected with receiver status 05", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
   let reads = 0;
   const fake = fakeDevice((request) => {
     reads++;
@@ -411,7 +421,7 @@ test("transport never retries a setting write rejected with receiver status 05",
   fake.device.productId = 0x5402;
   const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
   client.device = fake.device;
-  await assert.rejects(
+  const rejected = assert.rejects(
     client.transact({
       category: 1,
       register: 9,
@@ -421,45 +431,56 @@ test("transport never retries a setting write rejected with receiver status 05",
     }),
     /接收器未收到鼠标响应（状态 05）/,
   );
+  await flushMicrotasks();
+  t.mock.timers.tick(30);
+  await rejected;
   assert.equal(reads, 1);
   assert.equal(fake.writes.length, 1);
 });
-test("transport discards receiver status 05 for an unrelated category or register", async () => {
-  let reads = 0;
-  const fake = fakeDevice((request) => {
-    reads++;
-    return response(
-      request,
-      reads === 1 ? { 0: 5, 1: 8 } : reads === 2 ? { 0: 5, 2: 0x84 } : { 7: 8 },
+test("transport discards receiver status 05 for an unrelated category or register", async (t) => {
+  await withMockClock(t, async () => {
+    let reads = 0;
+    const fake = fakeDevice((request) => {
+      reads++;
+      return response(
+        request,
+        reads === 1
+          ? { 0: 5, 1: 8 }
+          : reads === 2
+            ? { 0: 5, 2: 0x84 }
+            : { 7: 8 },
+      );
+    });
+    const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 100 });
+    client.device = fake.device;
+    assert.equal((await client.transact(readCommand(1, 9, 2)))[7], 8);
+    assert.equal(reads, 3);
+    assert.equal(fake.writes.length, 1);
+  });
+});
+test("transport reports a corrupt status 05 packet as a checksum failure", async (t) => {
+  await withMockClock(t, async () => {
+    let reads = 0;
+    const fake = fakeDevice((request) => {
+      reads++;
+      const reply = response(request, { 0: 5 });
+      reply[63] ^= 1;
+      return reply;
+    });
+    const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
+    client.device = fake.device;
+    await assert.rejects(
+      client.transact(readCommand(1, 9, 2)),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /校验和/);
+        assert.doesNotMatch(error.message, /状态 05/);
+        return true;
+      },
     );
+    assert.equal(reads, 1);
+    assert.equal(fake.writes.length, 1);
   });
-  const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 100 });
-  client.device = fake.device;
-  assert.equal((await client.transact(readCommand(1, 9, 2)))[7], 8);
-  assert.equal(reads, 3);
-  assert.equal(fake.writes.length, 1);
-});
-test("transport reports a corrupt status 05 packet as a checksum failure", async () => {
-  let reads = 0;
-  const fake = fakeDevice((request) => {
-    reads++;
-    const reply = response(request, { 0: 5 });
-    reply[63] ^= 1;
-    return reply;
-  });
-  const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
-  client.device = fake.device;
-  await assert.rejects(
-    client.transact(readCommand(1, 9, 2)),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.match(error.message, /校验和/);
-      assert.doesNotMatch(error.message, /状态 05/);
-      return true;
-    },
-  );
-  assert.equal(reads, 1);
-  assert.equal(fake.writes.length, 1);
 });
 test("transport rejects corrupt checksums and continues serial queue after failure", async () => {
   let count = 0;
@@ -568,104 +589,112 @@ test("receiver connection failures explain wireless recovery and retain the caus
   });
   assert.equal(client.connected, false);
 });
-test("1K receiver preflight skips short interfaces without SET and handshakes the full interface", async () => {
-  for (const probe of [
-    new Uint8Array(1),
-    new Uint8Array(63),
-    new Uint8Array(66),
-  ]) {
-    const short = receiverCandidate(() => probe);
-    const readsAtWriteCounts: number[] = [];
-    const full = receiverCandidate((request) => {
-      readsAtWriteCounts.push(full.writes.length);
-      return full.writes.length === 0
-        ? new Uint8Array(64)
-        : receiverHandshake(request);
-    });
-    const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
-    assert.equal(
-      await client.connectDevices([short.device, full.device]),
-      full.device,
-    );
-    assert.equal(short.writes.length, 0);
-    assert.equal(short.device.opened, false);
-    assert.deepEqual(readsAtWriteCounts, [0, 1, 2]);
-    assert.deepEqual(
-      full.writes.map((packet) => packet[2]),
-      [0x89, 0x84],
-    );
-    assert.deepEqual(
-      client.connectionAttempts.map(({ candidate, phase, probeLength }) => ({
-        candidate,
-        phase,
-        probeLength,
-      })),
-      [
-        { candidate: 1, phase: "probe", probeLength: probe.length },
-        { candidate: 2, phase: "connected", probeLength: 64 },
-      ],
-    );
-    assert.ok(client.connectionAttempts[0].error);
-    await client.disconnect();
-  }
-});
-test("1K receiver preflight accepts a 65-byte report only with its leading zero ID", async () => {
-  for (const prefix of [0, 1]) {
-    const fake = receiverCandidate((request) => {
-      if (fake.writes.length) return receiverHandshake(request);
-      const probe = new Uint8Array(65);
-      probe[0] = prefix;
-      return probe;
-    });
-    const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
-    if (prefix === 0) {
-      assert.equal(await client.connectDevices([fake.device]), fake.device);
+test("1K receiver preflight skips short interfaces without SET and handshakes the full interface", async (t) => {
+  await withMockClock(t, async () => {
+    for (const probe of [
+      new Uint8Array(1),
+      new Uint8Array(63),
+      new Uint8Array(66),
+    ]) {
+      const short = receiverCandidate(() => probe);
+      const readsAtWriteCounts: number[] = [];
+      const full = receiverCandidate((request) => {
+        readsAtWriteCounts.push(full.writes.length);
+        return full.writes.length === 0
+          ? new Uint8Array(64)
+          : receiverHandshake(request);
+      });
+      const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
+      assert.equal(
+        await client.connectDevices([short.device, full.device]),
+        full.device,
+      );
+      assert.equal(short.writes.length, 0);
+      assert.equal(short.device.opened, false);
+      assert.deepEqual(readsAtWriteCounts, [0, 1, 2]);
       assert.deepEqual(
-        fake.writes.map((packet) => packet[2]),
+        full.writes.map((packet) => packet[2]),
         [0x89, 0x84],
       );
-      assert.equal(client.connectionAttempts[0].probeLength, 65);
-    } else {
-      await assert.rejects(client.connectDevices([fake.device]), /报告长度/);
-      assert.equal(fake.writes.length, 0);
-      assert.equal(fake.device.opened, false);
+      assert.deepEqual(
+        client.connectionAttempts.map(({ candidate, phase, probeLength }) => ({
+          candidate,
+          phase,
+          probeLength,
+        })),
+        [
+          { candidate: 1, phase: "probe", probeLength: probe.length },
+          { candidate: 2, phase: "connected", probeLength: 64 },
+        ],
+      );
+      assert.ok(client.connectionAttempts[0].error);
+      await client.disconnect();
     }
-    await client.disconnect();
-  }
-});
-test("1K receiver preflight cannot accept a cached reply as a fresh handshake", async () => {
-  let reads = 0;
-  const fake = receiverCandidate((request) => {
-    reads++;
-    return reads === 1
-      ? response(buildPacket(1, 0x89, 2), { 7: 8 })
-      : response(request, { 0: 5 });
   });
-  const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
-  await assert.rejects(client.connectDevices([fake.device]), /状态 05/);
-  assert.deepEqual(
-    fake.writes.map((packet) => packet[2]),
-    [0x89],
-  );
-  assert.equal(reads, 2);
-  assert.equal(client.connected, false);
-  assert.equal(client.connectionAttempts[0].phase, "polling");
 });
-test("1K receiver preflight closes a hanging candidate and continues to the next", async () => {
-  const hung = receiverCandidate(() => new Promise<Uint8Array>(() => {}));
-  const full = receiverCandidate((request) => receiverHandshake(request));
-  const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 100 });
-  assert.equal(
-    await client.connectDevices([hung.device, full.device]),
-    full.device,
-  );
-  assert.equal(hung.writes.length, 0);
-  assert.equal(hung.device.opened, false);
-  assert.equal(client.connected, true);
-  assert.equal(client.connectionAttempts[0].phase, "probe");
-  assert.match(client.connectionAttempts[0].error ?? "", /超时/);
-  assert.equal(client.connectionAttempts[1].phase, "connected");
-  await client.disconnect();
+test("1K receiver preflight accepts a 65-byte report only with its leading zero ID", async (t) => {
+  await withMockClock(t, async () => {
+    for (const prefix of [0, 1]) {
+      const fake = receiverCandidate((request) => {
+        if (fake.writes.length) return receiverHandshake(request);
+        const probe = new Uint8Array(65);
+        probe[0] = prefix;
+        return probe;
+      });
+      const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
+      if (prefix === 0) {
+        assert.equal(await client.connectDevices([fake.device]), fake.device);
+        assert.deepEqual(
+          fake.writes.map((packet) => packet[2]),
+          [0x89, 0x84],
+        );
+        assert.equal(client.connectionAttempts[0].probeLength, 65);
+      } else {
+        await assert.rejects(client.connectDevices([fake.device]), /报告长度/);
+        assert.equal(fake.writes.length, 0);
+        assert.equal(fake.device.opened, false);
+      }
+      await client.disconnect();
+    }
+  });
+});
+test("1K receiver preflight cannot accept a cached reply as a fresh handshake", async (t) => {
+  await withMockClock(t, async () => {
+    let reads = 0;
+    const fake = receiverCandidate((request) => {
+      reads++;
+      return reads === 1
+        ? response(buildPacket(1, 0x89, 2), { 7: 8 })
+        : response(request, { 0: 5 });
+    });
+    const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 50 });
+    await assert.rejects(client.connectDevices([fake.device]), /状态 05/);
+    assert.deepEqual(
+      fake.writes.map((packet) => packet[2]),
+      [0x89],
+    );
+    assert.equal(reads, 2);
+    assert.equal(client.connected, false);
+    assert.equal(client.connectionAttempts[0].phase, "polling");
+  });
+});
+test("1K receiver preflight closes a hanging candidate and continues to the next", async (t) => {
+  await withMockClock(t, async () => {
+    const hung = receiverCandidate(() => new Promise<Uint8Array>(() => {}));
+    const full = receiverCandidate((request) => receiverHandshake(request));
+    const client = new PulsarHidClient({ pollIntervalMs: 0, timeoutMs: 100 });
+    assert.equal(
+      await client.connectDevices([hung.device, full.device]),
+      full.device,
+    );
+    assert.equal(hung.writes.length, 0);
+    assert.equal(hung.device.opened, false);
+    assert.equal(client.connected, true);
+    assert.equal(client.connectionAttempts[0].phase, "probe");
+    assert.match(client.connectionAttempts[0].error ?? "", /超时/);
+    assert.equal(client.connectionAttempts[1].phase, "connected");
+    await client.disconnect();
+  });
 });
 test("receiver preflight does not change cable connection I/O", async () => {
   for (const productId of [0x3401]) {
@@ -792,18 +821,20 @@ test("1K identity retry stops when the connection changes during its recovery wa
   assert.equal(fake.writes.filter((packet) => packet[2] === 0x84).length, 1);
   assert.equal(client.connectionAttempts[0].identityTries, 1);
 });
-test("1K identity never retries an I/O timeout that invalidates the device", async () => {
-  const fake = receiverCandidate((request) => receiverHandshake(request));
-  const send = fake.device.sendFeatureReport;
-  fake.device.sendFeatureReport = async function (id, data) {
-    await send.call(this, id, data);
-    if (fake.writes.at(-1)?.[2] === 0x84) await new Promise<void>(() => {});
-  };
-  const client = new PulsarHidClient({ timeoutMs: 100 });
-  await assert.rejects(client.connectDevices([fake.device]), /HID I\/O 超时/);
-  assert.equal(fake.writes.filter((packet) => packet[2] === 0x84).length, 1);
-  assert.equal(client.connectionAttempts[0].identityTries, 1);
-  assert.equal(client.connected, false);
+test("1K identity never retries an I/O timeout that invalidates the device", async (t) => {
+  await withMockClock(t, async () => {
+    const fake = receiverCandidate((request) => receiverHandshake(request));
+    const send = fake.device.sendFeatureReport;
+    fake.device.sendFeatureReport = async function (id, data) {
+      await send.call(this, id, data);
+      if (fake.writes.at(-1)?.[2] === 0x84) await new Promise<void>(() => {});
+    };
+    const client = new PulsarHidClient({ timeoutMs: 100 });
+    await assert.rejects(client.connectDevices([fake.device]), /HID I\/O 超时/);
+    assert.equal(fake.writes.filter((packet) => packet[2] === 0x84).length, 1);
+    assert.equal(client.connectionAttempts[0].identityTries, 1);
+    assert.equal(client.connected, false);
+  });
 });
 test("1K identity does not retry wrong models, terminal replies, corrupt replies or receive errors", async () => {
   for (const failure of [
@@ -1240,14 +1271,16 @@ test("macro references are verified before any profile mutation", async () => {
   await assert.rejects(client.writeProfile(next, previous), /宏不存在/);
   assert.equal(fake.writes.length, 0);
 });
-test("a hanging HID read expires and invalidates the session instead of blocking the queue", async () => {
-  const fake = fakeDevice(() => new Promise<Uint8Array>(() => {})),
-    client = new PulsarHidClient({ timeoutMs: 15 });
-  client.device = fake.device;
-  await assert.rejects(client.transact(readCommand(1, 9, 2)), /I\/O 超时/);
-  assert.equal(client.connected, false);
-  assert.equal(fake.device.opened, false);
-  await assert.rejects(client.transact(readCommand(1, 9, 2)), /请先连接/);
+test("a hanging HID read expires and invalidates the session instead of blocking the queue", async (t) => {
+  await withMockClock(t, async () => {
+    const fake = fakeDevice(() => new Promise<Uint8Array>(() => {})),
+      client = new PulsarHidClient({ timeoutMs: 15 });
+    client.device = fake.device;
+    await assert.rejects(client.transact(readCommand(1, 9, 2)), /I\/O 超时/);
+    assert.equal(client.connected, false);
+    assert.equal(fake.device.opened, false);
+    await assert.rejects(client.transact(readCommand(1, 9, 2)), /请先连接/);
+  });
 });
 test("invalid power threshold is rejected before profile or global writes", async () => {
   const fake = fakeDevice((request) => response(request)),

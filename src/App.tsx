@@ -73,6 +73,23 @@ import {
 } from "./workspace";
 import { MacroEditor } from "./MacroEditor";
 import { ReceiverPairingDialog } from "./ReceiverPairingDialog";
+import { FirmwareFlashDialog } from "./FirmwareFlashDialog";
+import {
+  formatFirmwareVersion,
+  formatFirmwareVersionMessage,
+} from "./firmware-version";
+import {
+  FIRMWARE_RELEASE,
+  getFirmwareBytes,
+  readFirmwareFile,
+  type FirmwareImage,
+} from "./firmware-package";
+import {
+  requestFirmwareDevices,
+  enterFirmwareBootloader,
+  flashFirmware,
+  type FirmwareLog,
+} from "./firmware";
 import {
   pairReceiver,
   requestPairingDevices,
@@ -452,6 +469,30 @@ export default function App() {
   const [linked, setLinked] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
   const [showPairing, setShowPairing] = useState(false);
+  const [showFirmware, setShowFirmware] = useState(false);
+  const firmwareTrigger = useRef<HTMLButtonElement>(null);
+  const [firmware, setFirmware] = useState<FirmwareImage | null>(null);
+  const [firmwareValidating, setFirmwareValidating] = useState(false);
+  const [firmwareStage, setFirmwareStage] = useState<
+    "prepare" | "bootloader" | "verify" | "complete"
+  >("prepare");
+  const [firmwareCurrentVersion, setFirmwareCurrentVersion] =
+    useState<string>();
+  const [firmwareProgress, setFirmwareProgress] = useState<{
+    message: string;
+    percent: number;
+  } | null>(null);
+  const [firmwareResult, setFirmwareResult] = useState<{
+    text: string;
+    error?: boolean;
+  } | null>(null);
+  const firmwareValidation = useRef(0);
+  const firmwareAbort = useRef<AbortController | null>(null);
+  const firmwareDiagnostics = useRef<{
+    package?: FirmwareImage;
+    logs: FirmwareLog[];
+    result?: string;
+  }>({ logs: [] });
   const pairingTrigger = useRef<HTMLButtonElement>(null);
   const [pairingProgress, setPairingProgress] = useState<string | null>(null);
   const [pairingResult, setPairingResult] = useState<{
@@ -514,11 +555,26 @@ export default function App() {
     });
     return () => {
       pairingAbort.current?.abort();
+      firmwareAbort.current?.abort();
+      firmwareValidation.current++;
       clientRef.current = null;
       busyRef.current = false;
       void c.dispose();
     };
   }, []);
+  useEffect(() => {
+    if (
+      firmwareStage === "complete" ||
+      (firmwareStage === "prepare" && !firmwareAbort.current)
+    )
+      return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [firmwareStage, busy]);
   useEffect(() => {
     try {
       saveWorkspace(profiles);
@@ -692,6 +748,188 @@ export default function App() {
   async function connect() {
     await connectDevice(false);
   }
+  async function selectFirmware(file: File) {
+    if (busyRef.current || firmwareStage !== "prepare") return;
+    const token = ++firmwareValidation.current;
+    setFirmware(null);
+    setFirmwareValidating(true);
+    setFirmwareResult(null);
+    firmwareDiagnostics.current = { logs: [] };
+    try {
+      const image = await readFirmwareFile(file);
+      if (token !== firmwareValidation.current) return;
+      setFirmware(image);
+      firmwareDiagnostics.current.package = image;
+    } catch (error) {
+      if (token !== firmwareValidation.current) return;
+      setFirmwareResult({
+        text: error instanceof Error ? error.message : String(error),
+        error: true,
+      });
+    } finally {
+      if (token === firmwareValidation.current) setFirmwareValidating(false);
+    }
+  }
+  async function startFirmware() {
+    if (
+      busyRef.current ||
+      firmwareValidating ||
+      !firmware ||
+      firmwareStage === "complete"
+    )
+      return;
+    const c = client();
+    const controller = new AbortController();
+    let recoveryStage = firmwareStage;
+    firmwareAbort.current = controller;
+    setFirmwareResult(null);
+    setFirmwareProgress({
+      message: "请在浏览器中选择目标 USB 设备…",
+      percent: 0,
+    });
+    await run(
+      "固件刷写",
+      async () => {
+        try {
+          // Revalidate the opaque handle before any mode change (including
+          // after development hot reload replaces the importer's private store).
+          if (firmwareStage === "prepare") getFirmwareBytes(firmware);
+          // Each USB mode gets its own explicit click, preserving user activation
+          // for requestDevice and avoiding unrelated previously granted devices.
+          const devices = await requestFirmwareDevices(
+            firmwareStage === "bootloader" ? "bootloader" : "normal",
+          );
+          const active = () => {
+            if (controller.signal.aborted || clientRef.current !== c)
+              throw new Error("刷写会话已结束，请重新检查设备状态");
+          };
+          active();
+          if (firmwareStage === "prepare") {
+            await c.connectDevices(devices);
+            active();
+            const version = await c.readFirmwareVersion();
+            active();
+            setFirmwareCurrentVersion(version);
+            if (
+              parseInt(version.replaceAll(".", ""), 16) >
+              parseInt(FIRMWARE_RELEASE.deviceVersion.replaceAll(".", ""), 16)
+            )
+              throw new Error(
+                `鼠标当前版本 ${version} 高于所选固件，本流程不支持降级。`,
+              );
+            const settingsDevice = c.device!;
+            await c.disconnect();
+            active();
+            c.assertDevicesReleased(devices);
+            setConnected(false);
+            setSnapshot(null);
+            setPowerDraft(undefined);
+            setDeviceMacros([]);
+            await enterFirmwareBootloader(devices, {
+              settingsDevice,
+              signal: controller.signal,
+              onProgress: ({ phase }) => {
+                // Once entry is attempted, a transport failure can mean the mouse
+                // already re-enumerated. Keep the explicit bootloader retry path.
+                if (phase === "entering") {
+                  recoveryStage = "bootloader";
+                  setFirmwareStage("bootloader");
+                }
+                setFirmwareProgress({
+                  message: "正在让鼠标进入升级模式…",
+                  percent: 0,
+                });
+              },
+              onLog: recordFirmwareLog,
+            });
+            active();
+            setFirmwareStage("bootloader");
+            setFirmwareResult({
+              text: "升级模式命令已发送。保持 USB 连接，等待设备重新出现后，点击“选择引导设备并刷写”继续。",
+            });
+          } else if (firmwareStage === "bootloader") {
+            await c.disconnect();
+            active();
+            await flashFirmware(devices, firmware, {
+              signal: controller.signal,
+              onLog: recordFirmwareLog,
+              onProgress: ({ phase, completed, total }) => {
+                const labels: Record<string, string> = {
+                  opening: "正在打开升级通道…",
+                  erasing: "正在擦除固件…",
+                  preparing: "正在准备传输…",
+                  writing: "正在写入固件，请保持连接…",
+                  verifying: "正在校验设备中的固件…",
+                  rebooting: "正在重启鼠标…",
+                };
+                if (phase === "rebooting") {
+                  recoveryStage = "verify";
+                  setFirmwareStage("verify");
+                }
+                setFirmwareProgress({
+                  message: labels[phase] ?? "正在处理固件…",
+                  percent: total ? Math.min(99, (completed / total) * 100) : 0,
+                });
+              },
+            });
+            active();
+            setFirmwareStage("verify");
+            setFirmwareResult({
+              text: "设备校验通过，重启命令已发送。等待鼠标重新出现后，点击“重新连接鼠标并验证”；版本回读通过后才会显示完成。",
+            });
+          } else {
+            await c.connectDevices(devices);
+            active();
+            const version = await c.readFirmwareVersion();
+            active();
+            if (version !== FIRMWARE_RELEASE.deviceVersion)
+              throw new Error(
+                `固件版本尚未确认：设备返回 ${version}，期望 ${FIRMWARE_RELEASE.deviceVersion}。请确认选择了刚刚刷写的有线鼠标。`,
+              );
+            const s = await c.readSnapshot();
+            active();
+            setSelectedProfile(s.profile.profile);
+            applySnapshot(s, s.profile.profile, true);
+            setDeviceMacros([]);
+            setFirmwareCurrentVersion(version);
+            setFirmwareStage("complete");
+            saveAutoConnect(true);
+            const text = `固件刷写完成，设备版本 ${version} 已回读确认。配置已重新读取，本地草稿保留；设备宏可在宏编辑器刷新。`;
+            firmwareDiagnostics.current.result = text;
+            setFirmwareResult({ text });
+            setNotice({ text: formatFirmwareVersionMessage(text) });
+          }
+        } catch (error) {
+          if (clientRef.current !== c) return;
+          const detail = error instanceof Error ? error.message : String(error);
+          const recovery =
+            recoveryStage === "prepare"
+              ? " 尚未进入升级模式，可重新选择目标有线鼠标。"
+              : recoveryStage === "bootloader"
+                ? " 未确认刷写完成。请保持供电，重新选择引导设备重试。若设备仍显示 Xlite v4，可返回第一步。"
+                : " 未确认刷写完成。请保持供电，等待鼠标重新出现后，再次连接验证；若仍只显示引导设备，请返回刷写步骤。";
+          const text = `${detail}${recovery}`;
+          firmwareDiagnostics.current.result = text;
+          setFirmwareResult({ text, error: true });
+          await c.disconnect().catch(() => undefined);
+          setConnected(false);
+          setSnapshot(null);
+          setPowerDraft(undefined);
+          setDeviceMacros([]);
+        } finally {
+          if (firmwareAbort.current === controller)
+            firmwareAbort.current = null;
+          setFirmwareProgress(null);
+        }
+      },
+      c,
+    );
+  }
+  function recordFirmwareLog(entry: FirmwareLog) {
+    firmwareDiagnostics.current.logs.push(entry);
+    if (firmwareDiagnostics.current.logs.length > 100)
+      firmwareDiagnostics.current.logs.shift();
+  }
   async function startPairing() {
     if (busyRef.current) return;
     const c = client();
@@ -838,9 +1076,7 @@ export default function App() {
           /[。.]$/,
           "",
         );
-        throw new Error(
-          `${message}。部分设置可能已写入，请先重新读取设备。`,
-        );
+        throw new Error(`${message}。部分设置可能已写入，请先重新读取设备。`);
       }
     });
   }
@@ -951,6 +1187,7 @@ export default function App() {
       connectionAttempts: clientRef.current?.connectionAttempts ?? [],
       logs: clientRef.current?.logs ?? [],
       pairing: pairingDiagnostics.current,
+      firmware: firmwareDiagnostics.current,
     };
   }
 
@@ -991,7 +1228,7 @@ export default function App() {
   const currentStage = p.dpiStages[p.activeStage - 1];
   return (
     <div className="app-shell">
-      <aside className="sidebar" inert={showPairing}>
+      <aside className="sidebar" inert={showPairing || showFirmware}>
         <a
           className="brand"
           href="#"
@@ -1043,7 +1280,7 @@ export default function App() {
           </div>
         </div>
       </aside>
-      <div className="main-shell" inert={showPairing}>
+      <div className="main-shell" inert={showPairing || showFirmware}>
         <header className="topbar">
           <div className="breadcrumb">
             设备 <ChevronRight size={14} />
@@ -1907,7 +2144,8 @@ export default function App() {
                       <Cpu size={20} />
                       <small>固件版本</small>
                       <strong className="firmware-value">
-                        {snapshot?.firmwareVersion ?? "—"}
+                        {formatFirmwareVersion(snapshot?.firmwareVersion) ??
+                          "—"}
                       </strong>
                       <span>从设备读取</span>
                     </div>
@@ -1994,9 +2232,27 @@ export default function App() {
                   </Panel>
                   <Panel title="固件" icon={Cpu}>
                     <p className="hint">
-                      当前版本：{snapshot?.firmwareVersion ?? "连接后读取"}
-                      。升级涉及引导加载器和独立固件包，本版本暂不提供刷写。
+                      当前版本：
+                      {formatFirmwareVersion(snapshot?.firmwareVersion) ??
+                        "连接后读取"}
+                      。支持 Xlite v4 Mini 有线刷写官方 1.0.1.7
+                      固件；文件校验、设备校验和版本回读分步完成。已完成一次实机刷写与配置核对。
                     </p>
+                    <button
+                      ref={firmwareTrigger}
+                      className="button primary"
+                      disabled={!!busy}
+                      onClick={() => {
+                        if (firmwareStage === "prepare")
+                          setFirmwareCurrentVersion(snapshot?.firmwareVersion);
+                        setShowFirmware(true);
+                      }}
+                    >
+                      <ArrowUpFromLine size={16} />
+                      {firmwareStage === "prepare"
+                        ? "刷写鼠标固件"
+                        : "查看固件刷写进度"}
+                    </button>
                     <a
                       className="text-button"
                       href="https://www.pulsar.gg/pages/download"
@@ -2246,7 +2502,13 @@ export default function App() {
                       <b className="pending-text">部分验证，仍有待验收项</b>
                     </div>
                     <div className="capability-row">
-                      <span>固件升级、宏移动轨迹和实时无线信号</span>
+                      <span>USB 有线固件刷写</span>
+                      <b className="pending-text">
+                        1.0.1.7 已完成一次有线实机验证
+                      </b>
+                    </div>
+                    <div className="capability-row">
+                      <span>宏移动轨迹和实时无线信号</span>
                       <b className="pending-text">尚未实现</b>
                     </div>
                     <div className="capability-row">
@@ -2523,6 +2785,34 @@ export default function App() {
           onClose={() => setShowPairing(false)}
         />
       )}
+      {showFirmware && (
+        <FirmwareFlashDialog
+          busy={!!busy}
+          supported={isWebHidSupported()}
+          stage={firmwareStage}
+          currentVersion={firmwareCurrentVersion}
+          firmware={firmware}
+          validating={firmwareValidating}
+          progress={firmwareProgress}
+          result={firmwareResult}
+          onFile={(file) => void selectFirmware(file)}
+          onStart={() => void startFirmware()}
+          onBack={() => {
+            if (busyRef.current) return;
+            if (firmwareStage === "bootloader") setFirmwareStage("prepare");
+            else if (firmwareStage === "verify") setFirmwareStage("bootloader");
+            setFirmwareResult(null);
+            setFirmwareProgress(null);
+          }}
+          onClose={() => {
+            if (busyRef.current) return;
+            firmwareValidation.current++;
+            setFirmwareValidating(false);
+            setShowFirmware(false);
+          }}
+          returnFocusTo={firmwareTrigger.current}
+        />
+      )}
       {showHelp && (
         <div className="modal-backdrop" onClick={() => setShowHelp(false)}>
           <section
@@ -2562,7 +2852,8 @@ export default function App() {
             <div className="callout">
               <Info size={18} />
               <span>
-                支持配置切换与宏上传。固件升级、宏移动轨迹和实时无线信号尚未实现；浏览器无法修改
+                支持配置切换与宏上传；电源管理页提供实验性 USB
+                有线固件刷写。宏移动轨迹和实时无线信号尚未实现；浏览器无法修改
                 Windows 系统设置。
               </span>
             </div>
