@@ -10,6 +10,7 @@ import {
   Activity,
   ArrowDownToLine,
   ArrowUpFromLine,
+  Battery,
   BatteryCharging,
   Check,
   ChevronRight,
@@ -1226,6 +1227,25 @@ export default function App() {
     : "本地编辑模式";
   const page = tabs.find((t) => t.id === tab);
   const currentStage = p.dpiStages[p.activeStage - 1];
+  const power = connected ? snapshot?.power : undefined;
+  const batteryPercent = power?.batteryPercent;
+  const batteryValue = batteryPercent === undefined ? "—" : `${batteryPercent}%`;
+  const batteryLow =
+    batteryPercent !== undefined &&
+    !power?.charging &&
+    batteryPercent <= (power?.lowPowerPercent ?? 10);
+  const batteryStatus = !connected
+    ? "连接后读取"
+    : !power
+      ? "等待读取电量"
+      : power.charging
+        ? "正在充电"
+        : batteryPercent === undefined
+          ? "电量未知"
+          : batteryLow
+            ? "电量偏低，请及时充电"
+            : "使用电池";
+  const BatteryIcon = power?.charging ? BatteryCharging : Battery;
   return (
     <div className="app-shell">
       <aside className="sidebar" inert={showPairing || showFirmware}>
@@ -1464,21 +1484,22 @@ export default function App() {
                       </strong>
                       <span>{1000 / g.pollingRate} ms 报告间隔</span>
                     </div>
-                    <div className="stat-card">
-                      <BatteryCharging size={20} />
+                    <div
+                      className={`stat-card battery-stat ${batteryLow ? "battery-low" : ""}`}
+                    >
+                      <BatteryIcon size={20} />
                       <small>设备电量</small>
-                      <strong>
-                        {snapshot?.power?.batteryPercent !== undefined
-                          ? `${snapshot.power.batteryPercent}%`
-                          : "—"}
-                      </strong>
-                      <span>
-                        {snapshot?.power
-                          ? snapshot.power.charging
-                            ? "正在充电"
-                            : "使用电池"
-                          : "连接后读取"}
-                      </span>
+                      <strong>{batteryValue}</strong>
+                      <span>{batteryStatus}</span>
+                      <div className="battery-track" aria-hidden="true">
+                        <span style={{ width: `${batteryPercent ?? 0}%` }} />
+                      </div>
+                      <button
+                        className="battery-details"
+                        onClick={() => setTab("power")}
+                      >
+                        查看电量详情 <ChevronRight size={14} />
+                      </button>
                     </div>
                   </div>
                   <Panel title="快速开始" icon={Zap}>
@@ -2114,19 +2135,16 @@ export default function App() {
               {tab === "power" && (
                 <>
                   <div className="stats-grid">
-                    <div className="stat-card">
-                      <BatteryCharging size={20} />
+                    <div
+                      className={`stat-card battery-stat ${batteryLow ? "battery-low" : ""}`}
+                    >
+                      <BatteryIcon size={20} />
                       <small>剩余电量</small>
-                      <strong>
-                        {snapshot?.power?.batteryPercent !== undefined
-                          ? `${snapshot.power.batteryPercent}%`
-                          : "—"}
-                      </strong>
-                      <span>
-                        {snapshot?.power?.charging
-                          ? "USB 正在充电"
-                          : "连接设备后读取"}
-                      </span>
+                      <strong>{batteryValue}</strong>
+                      <span>{batteryStatus}</span>
+                      <div className="battery-track" aria-hidden="true">
+                        <span style={{ width: `${batteryPercent ?? 0}%` }} />
+                      </div>
                     </div>
                     <div className="stat-card">
                       <Usb size={20} />
@@ -2574,7 +2592,7 @@ export default function App() {
               )}
             </div>
             <aside className="device-sidebar">
-              <div className="device-card">
+              <div className={`device-card ${batteryLow ? "battery-low" : ""}`}>
                 <div className="device-card-heading">
                   <span className="device-icon">
                     <Mouse size={23} />
@@ -2593,26 +2611,26 @@ export default function App() {
                 </div>
                 <div className="device-battery">
                   <span>
-                    <BatteryCharging size={15} />
-                    {snapshot?.power
-                      ? snapshot.power.charging
-                        ? "正在充电"
-                        : "剩余电量"
-                      : "设备电量"}
+                    <BatteryIcon size={15} />
+                    {batteryStatus}
                   </span>
-                  <b>
-                    {snapshot?.power?.batteryPercent !== undefined
-                      ? `${snapshot.power.batteryPercent}%`
-                      : "—"}
-                  </b>
+                  <b>{batteryValue}</b>
                 </div>
-                <div className="battery-track">
+                <div className="battery-track" aria-hidden="true">
                   <span
                     style={{
-                      width: `${snapshot?.power?.batteryPercent ?? 0}%`,
+                      width: `${batteryPercent ?? 0}%`,
                     }}
                   />
                 </div>
+                {tab !== "power" && (
+                  <button
+                    className="battery-details"
+                    onClick={() => setTab("power")}
+                  >
+                    查看电量详情 <ChevronRight size={14} />
+                  </button>
+                )}
               </div>
               <div className="profile-selector">
                 <label className="eyebrow">当前配置</label>

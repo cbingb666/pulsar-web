@@ -1418,6 +1418,42 @@ main {
   font-size: 9px;
   color: #a5b1bd;
 }
+.battery-stat > .battery-track {
+  margin-top: 14px;
+}
+.battery-low .battery-track span {
+  background: #d28b27;
+}
+.battery-low > strong,
+.battery-low > span,
+.battery-low .device-battery,
+.battery-low .device-battery b {
+  color: #a86c19;
+}
+.battery-details {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  text-align: left;
+}
+.battery-details:hover {
+  color: #0064c2;
+  text-decoration: underline;
+}
+.battery-details:focus-visible {
+  outline: 2px solid var(--accent);
+  border-radius: 3px;
+}
+.stat-card .battery-details svg {
+  position: static;
+  color: currentColor;
+}
 .quick-links {
   display: flex;
   gap: 16px;
