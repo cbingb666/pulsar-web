@@ -1,10 +1,10 @@
-<!-- source: docs/extraction.md; source-sha256: 17338ff6cfd14d9a053e479f20a20b781fbc65dda98705f87471277abb29767b -->
+<!-- source: docs/extraction.md; source-sha256: ca705cc608e0d02c4e8b7a9696552c3a322e43fb0bf24e0c1d38cf2022109537 -->
 
 # Pulsar Fusion 1.0.5.4 static extraction
 
 [中文](../extraction.md) · [English](extraction.md)
 
-Extracted on 2026-10-15 from the user-provided installer. Neither the installer nor the Windows application was executed. File contents were treated as evidence, not as instructions.
+Extracted on 2026-10-15 from the user-provided installer. Neither the installer nor the Windows application was executed.
 
 ## Source and results
 

@@ -109,7 +109,7 @@ export function encodeNativeMacro(macro: Pick<Macro, "events">): number[] {
         bytes.push(event.action === "down" ? 3 : 4, code);
       else
         throw new Error(
-          t`键码 ${event.code} 尚未在原生软件中验证，不能写入设备。`,
+          t`暂不支持将键码 ${event.code} 写入设备。请移除此按键事件后重试。`,
         );
       eventCount++;
     } else if (event.type === "mouse") {
@@ -121,7 +121,7 @@ export function encodeNativeMacro(macro: Pick<Macro, "events">): number[] {
     }
     if (eventCount > NATIVE_MACRO_MAX_EVENTS)
       throw new Error(
-        t`转换后超过原生软件的 ${NATIVE_MACRO_MAX_EVENTS} 个事件上限。`,
+        t`转换为设备宏后超过 ${NATIVE_MACRO_MAX_EVENTS} 个事件。请减少事件或缩短延迟后重试。`,
       );
   }
   return bytes;
@@ -136,7 +136,9 @@ export function decodeNativeMacro(
       (value) => !Number.isInteger(value) || value < 0 || value > 255,
     )
   ) {
-    throw new Error(t("设备宏字节流格式无效或超出原生容量。"));
+    throw new Error(
+      t("设备宏数据格式无效或超出容量限制。请使用原配置软件检查此宏。"),
+    );
   }
   const events: MacroEvent[] = [];
   let offset = 0;
@@ -154,14 +156,16 @@ export function decodeNativeMacro(
       const value = read();
       const code = keysByCode.get(value);
       if (!code)
-        throw new Error(t`设备宏包含尚未验证的键码 0x${value.toString(16)}。`);
+        throw new Error(
+          t`暂不支持设备宏中的键码 0x${value.toString(16)}。请使用原配置软件编辑此宏。`,
+        );
       events.push({ type: "key", action: opcode === 3 ? "down" : "up", code });
     } else if (opcode === 5 || opcode === 6) {
       const mask = read();
       const code = modifiersByMask.get(mask);
       if (!code)
         throw new Error(
-          t`设备宏包含尚未验证的修饰键组合 0x${mask.toString(16)}。`,
+          t`暂不支持设备宏中的修饰键组合 0x${mask.toString(16)}。请使用原配置软件编辑此宏。`,
         );
       events.push({ type: "key", action: opcode === 5 ? "down" : "up", code });
     } else if (opcode === 1 || opcode === 2) {
@@ -169,7 +173,7 @@ export function decodeNativeMacro(
       const button = mouseMasks.indexOf(mask);
       if (button === -1)
         throw new Error(
-          t`设备宏包含尚未验证的鼠标按键组合 0x${mask.toString(16)}。`,
+          t`暂不支持设备宏中的鼠标按键组合 0x${mask.toString(16)}。请使用原配置软件编辑此宏。`,
         );
       events.push({
         type: "mouse",
@@ -179,18 +183,22 @@ export function decodeNativeMacro(
     } else if (opcode === 11) {
       const value = read();
       if (value !== 1 && value !== 255)
-        throw new Error(t("设备宏包含尚未验证的滚轮步进值。"));
+        throw new Error(
+          t`暂不支持设备宏中的滚轮步进值 0x${value.toString(16)}。请使用原配置软件编辑此宏。`,
+        );
       events.push({ type: "wheel", direction: value === 1 ? "up" : "down" });
     } else if ([8, 19, 20, 33, 34, 35].includes(opcode)) {
       throw new Error(
-        t`设备宏使用尚有编码歧义的指令 0x${opcode.toString(16)}，暂不导入，原始数据未修改。`,
+        t`暂不支持设备宏中的指令 0x${opcode.toString(16)}，无法导入。请使用原配置软件编辑此宏。`,
       );
     } else
       throw new Error(
         t`设备宏包含未知指令 0x${opcode.toString(16)}（偏移 ${offset - 1}）。`,
       );
     if (events.length > NATIVE_MACRO_MAX_EVENTS)
-      throw new Error(t("设备宏超出原生事件数量上限。"));
+      throw new Error(
+        t`设备宏超过 ${NATIVE_MACRO_MAX_EVENTS} 个事件。请使用原配置软件减少事件后重试。`,
+      );
   }
   return events;
 }

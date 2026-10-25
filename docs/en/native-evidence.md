@@ -1,4 +1,4 @@
-<!-- source: docs/native-evidence.md; source-sha256: 4450afb065295e37f2edde7fd4e37a3ce1136054083d512b0ca2b2be29f4997a -->
+<!-- source: docs/native-evidence.md; source-sha256: a129a90b79d22d103369f36b0eff60750b3f1d9155e55bd75b90c41a8abadd0e -->
 
 # Evidence from the native application
 
@@ -100,4 +100,4 @@ Copied original assets for the local reproduction:
 - `public/assets/pulsar-logo.png`: original `CompanyName.png` (128 ×43).
 - `public/favicon.ico`: original `Config/XliteV4/AppICO.ico`, with 16, 24, 32, 48, 64, 72, 96, 128 and 256 px variants.
 
-These are byte-for-byte copies, not AI-generated replacements. They came from the supplied proprietary package and are intended here for the user's local reproduction; no publication or ownership claim is implied.
+These are byte-for-byte copies of the original resources. They came from the supplied proprietary package and are intended here for the user's local reproduction; no publication or ownership claim is implied.

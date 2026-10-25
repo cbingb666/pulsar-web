@@ -1,4 +1,4 @@
-<!-- source: docs/verification.md; source-sha256: e079294b858c38ea83036299e30fbabc885f934e9fb45cf288e687a954dbd31e -->
+<!-- source: docs/verification.md; source-sha256: 6b0e3d6570a77920193c2d48b34ecdab98812854925fa65d037e92f31d80c789 -->
 
 # Verification records
 
@@ -199,7 +199,7 @@ After attaching original `8K Dongle` (`3710:5403`), the app reported ambiguous p
 
 The implementation adds two-interface read-only routing: two consecutive observations per side must yield stable failure versus valid settings. Unknown/unstable results, single shared-descriptor candidates, multiple receivers, permission errors and timeout stop. Error names/browser limitations are in [pairing evidence](receiver-pairing-evidence.md#real-device-passive-routing-check).
 
-`.local/8k-route-check.ts` imports production `resolvePairingInterface` via a native adapter allowing only open/receive/close. It selected MI02 even with MI03 first; `.local/8k-route-check-result.json`: `ok: true`, `selectedInterface: 2`. Its explicit error translation does not replace WebHID permission/error/full-pairing acceptance. The agent sent no hardware pairing command.
+`.local/8k-route-check.ts` imports production `resolvePairingInterface` via a native adapter allowing only open/receive/close. It selected MI02 even with MI03 first; `.local/8k-route-check-result.json`: `ok: true`, `selectedInterface: 2`. Its explicit error translation does not replace WebHID permission/error/full-pairing acceptance. This routing check sent no pairing commands.
 
 At this routing checkpoint all 205 tests and TypeScript/Vite build passed. Regressions cover real descriptors/passive replies, reversed candidates, 65-byte prefixes/DataView offsets, classification, invalid replies, missing siblings, cancellation and late-open cleanup.
 

@@ -80,7 +80,7 @@ export function selectPairingInterface(devices: HidDevice[]): HidDevice {
   if (candidates.length !== 1)
     throw new Error(
       candidates.length > 1
-        ? t("浏览器返回了多个无法区分的配对通道，尚未发送命令。一个接收器也可能提供相同接口；请只保留目标接收器，若仍失败，请导出诊断以完成接口适配。")
+        ? t("浏览器返回了多个无法区分的配对通道，尚未发送命令。请只保留目标接收器后重试；若仍失败，请导出诊断。")
         : t("未找到兼容的配对通道（64 字节输入 / 输出报告 0）。请选择原版 1K Dongle 或 8K Dongle；可导出诊断以核对接口。"),
     );
   const device = candidates[0];

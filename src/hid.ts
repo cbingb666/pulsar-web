@@ -1254,7 +1254,10 @@ export class PulsarHidClient {
   async listMacros(): Promise<DeviceMacroSummary[]> {
     const count = await this.readMacroCount();
     if (!count) return [];
-    if (count > 128) throw new Error(t("设备宏数量超过当前实现的安全上限"));
+    if (count > 128)
+      throw new Error(
+        t("暂时无法读取超过 128 个宏的设备。请使用原配置软件整理宏后重试。"),
+      );
     const ids: number[] = [];
     for (let offset = 0; ids.length < count && offset < 26 * 8; offset += 26) {
       // List requests use the body as total count + entry offset, not profile.

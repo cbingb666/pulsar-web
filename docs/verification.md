@@ -199,7 +199,7 @@ node_modules/.bin/tsx scripts/hardware-client-smoke.ts --product-id=0x5402 --wri
 
 实现据此增加两接口只读识别：每侧连续读取两次，必须得到一侧稳定读取失败、另一侧稳定有效配置响应，才选择配对接口。未知或不稳定结果、单个共享描述符接口、多个接收器候选、权限错误和超时均停止。错误名称与浏览器行为的证据及限制见 [配对证据](receiver-pairing-evidence.md#实机被动路由检查)。
 
-`.local/8k-route-check.ts` 导入生产 `resolvePairingInterface`，通过只允许 open/receive/close 的原生 HID 适配器进行实机读取。即使先提供 MI03，仍选中 MI02；结果 `.local/8k-route-check-result.json` 为 `ok: true`、`selectedInterface: 2`。适配器显式转换原生读取错误，不能代替实际 WebHID 的授权、错误映射及完整配对验收。agent 未向硬件发送配对命令。
+`.local/8k-route-check.ts` 导入生产 `resolvePairingInterface`，通过只允许 open/receive/close 的原生 HID 适配器进行实机读取。即使先提供 MI03，仍选中 MI02；结果 `.local/8k-route-check-result.json` 为 `ok: true`、`selectedInterface: 2`。适配器显式转换原生读取错误，不能代替实际 WebHID 的授权、错误映射及完整配对验收。本次路由检查未发送配对命令。
 
 该接口修复检查点的 `npm test` 为 205 项通过，`npm run build` 的 TypeScript 与 Vite 构建通过。新增回归覆盖真实描述符/被动响应、候选逆序、65 字节前缀和 DataView 偏移、错误分类、无效响应、缺少接口、取消及延迟打开清理。
 

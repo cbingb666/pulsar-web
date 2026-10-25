@@ -1415,17 +1415,17 @@ export default function App() {
               <h1>{t(page?.label ?? "连接诊断")}</h1>
               <p>
                 {tab === "performance"
-                  ? t("从每一档 DPI 到每一次点击，让鼠标适应你的手感。")
+                  ? t("调整 DPI、回报率、抬起高度与点击响应。")
                   : tab === "customize"
-                    ? t("为每个按键分配动作，建立自己的操作习惯。")
+                    ? t("为鼠标按键分配动作或快捷键。")
                     : tab === "macro"
-                      ? t("记录、编辑并整理你的操作序列。")
+                      ? t("录制、编辑和上传宏。")
                       : tab === "power"
-                        ? t("掌握电池状态，调整休眠与低电量设置。")
+                        ? t("查看电量，调整休眠与低电量设置。")
                         : tab === "profiles"
-                          ? t("保存不同场景下的手感，随时导入与导出。")
+                          ? t("切换设备配置，导入和导出本地备份。")
                           : tab === "home"
-                            ? t("你的鼠标，你的设置。")
+                            ? t("查看 DPI、回报率和电量。")
                             : t("查看浏览器支持、设备连接与通信记录。")}
               </p>
             </div>
@@ -1481,11 +1481,10 @@ export default function App() {
                 <>
                   <section className="device-hero panel">
                     <div className="device-copy">
-                      <span className="eyebrow">ERGONOMIC. REFINED.</span>
                       <h2>
                         Xlite v4 <span>Mini</span>
                       </h2>
-                      <p>{t("精确控制，始于你的手感。")}</p>
+                      <p>{t("使用 USB 或无线接收器连接并配置鼠标。")}</p>
                       <div className="device-tags">
                         <span>
                           <Usb size={14} />
@@ -1792,7 +1791,7 @@ export default function App() {
                       </div>
                       <p className="hint">
                         {t(
-                          "有线和 1K 接收器最高 1000 Hz；8K 接收器支持 2000 / 4000 / 8000 Hz。",
+                          "有线和 1K 接收器最高 1000 Hz；8K 接收器支持 2000 / 4000 / 8000 Hz。8K 高回报率为实验性功能，实际报告频率尚未测量；如有异常请改用 1000 Hz。",
                         )}
                       </p>
                     </Panel>
@@ -2290,7 +2289,9 @@ export default function App() {
                               <span>
                                 <b>{t("8K 接收器指示灯")}</b>
                                 <small>
-                                  {t("选择连接状态显示或仅低电量提醒")}
+                                  {t(
+                                    "实验性设置；切换到“显示连接状态”后，读取完整配置可能超时。请重新读取检查。",
+                                  )}
                                 </small>
                               </span>
                               <select
@@ -2477,7 +2478,7 @@ export default function App() {
                           setConfirmAction({
                             title: t("将鼠标恢复出厂设置？"),
                             description: t(
-                              "此操作会清除设备内的自定义设置，并断开连接。请先导出所有需要的配置及宏。恢复命令来自原程序，尚未在这只鼠标上执行测试。",
+                              "此操作会清除设备内的自定义设置，并断开连接。请先导出所有需要的配置及宏。此功能为实验性，尚未完成实机验证；执行后请重新连接并检查配置和宏。",
                             ),
                             run: () => {
                               void run(t("发送出厂恢复命令"), async () => {
@@ -2581,50 +2582,6 @@ export default function App() {
                         )}
                       </p>
                     )}
-                  </Panel>
-                  <Panel title={t("功能验证状态")} icon={ShieldCheck}>
-                    <div className="capability-row">
-                      <span>
-                        {t("DPI、回报率、消抖、LOD、传感器开关、按键、灯光")}
-                      </span>
-                      <b className="positive">{t("已实机读取")}</b>
-                    </div>
-                    <div className="capability-row">
-                      <span>{t("写入设置")}</span>
-                      <b>{t("每次写入后回读验证")}</b>
-                    </div>
-                    <div className="capability-row">
-                      <span>{t("宏录制、编辑、设备上传与按键绑定")}</span>
-                      <b>{t("源程序协议已恢复")}</b>
-                    </div>
-                    <div className="capability-row">
-                      <span>{t("1K 接收器配对")}</span>
-                      <b className="positive">{t("已实机验证")}</b>
-                    </div>
-                    <div className="capability-row">
-                      <span>{t("8K 接收器配对与配置读取")}</span>
-                      <b className="positive">{t("已实机验证")}</b>
-                    </div>
-                    <div className="capability-row">
-                      <span>{t("8K 高回报率和接收器灯光")}</span>
-                      <b className="pending-text">
-                        {t("部分验证，仍有待验收项")}
-                      </b>
-                    </div>
-                    <div className="capability-row">
-                      <span>{t("USB 有线固件刷写")}</span>
-                      <b className="pending-text">
-                        {t("1.0.1.7 已完成一次有线实机验证")}
-                      </b>
-                    </div>
-                    <div className="capability-row">
-                      <span>{t("宏移动轨迹和实时无线信号")}</span>
-                      <b className="pending-text">{t("尚未实现")}</b>
-                    </div>
-                    <div className="capability-row">
-                      <span>{t("Windows 指针速度、开机启动、系统托盘")}</span>
-                      <b>{t("浏览器不提供系统控制")}</b>
-                    </div>
                   </Panel>
                   <Panel
                     title={t("通信记录")}
@@ -2758,7 +2715,7 @@ export default function App() {
               </div>
               <div className="sidebar-note">
                 <ShieldCheck size={20} />
-                <b>{t("设置直接写入设备")}</b>
+                <b>{t("配置保存在本机")}</b>
                 <p>
                   {t(
                     "Chrome / Edge 通过 WebHID 连接。配置保留在本机浏览器，无需账号。",
@@ -2977,7 +2934,7 @@ export default function App() {
               <Info size={18} />
               <span>
                 {t(
-                  "支持配置切换与宏上传；电源管理页提供实验性 USB 有线固件刷写。宏移动轨迹和实时无线信号尚未实现；浏览器无法修改 Windows 系统设置。",
+                  "支持配置切换与宏上传；电源管理页提供实验性 USB 有线固件刷写。暂不支持宏移动轨迹和实时无线信号显示；浏览器无法修改 Windows 系统设置。",
                 )}
               </span>
             </div>

@@ -160,17 +160,18 @@ export const englishMessages: Readonly<Record<string, string>> = {
     "Disconnected, but the browser could not save this preference. It may reconnect automatically after a reload.",
   断开: "Disconnect",
   连接鼠标: "Connect mouse",
-  "从每一档 DPI 到每一次点击，让鼠标适应你的手感。":
-    "Fine-tune every DPI stage and every click to suit your hand.",
-  "为每个按键分配动作，建立自己的操作习惯。":
-    "Assign an action to each button for the way you work.",
-  "记录、编辑并整理你的操作序列。":
-    "Record, edit, and organize your action sequences.",
-  "掌握电池状态，调整休眠与低电量设置。":
-    "Check battery status and adjust sleep and low-battery settings.",
-  "保存不同场景下的手感，随时导入与导出。":
-    "Save settings for different uses, then import or export them anytime.",
-  "你的鼠标，你的设置。": "Your mouse. Your settings.",
+  "调整 DPI、回报率、抬起高度与点击响应。":
+    "Adjust DPI, polling rate, lift-off distance, and click response.",
+  "为鼠标按键分配动作或快捷键。":
+    "Assign actions or shortcuts to mouse buttons.",
+  "录制、编辑和上传宏。":
+    "Record, edit, and upload macros.",
+  "查看电量，调整休眠与低电量设置。":
+    "Check battery level and adjust sleep and low-battery settings.",
+  "切换设备配置，导入和导出本地备份。":
+    "Switch device profiles and import or export local backups.",
+  "查看 DPI、回报率和电量。":
+    "View DPI, polling rate, and battery level.",
   "查看浏览器支持、设备连接与通信记录。":
     "Inspect browser support, device connections, and communication logs.",
   "重新读取设备（放弃本地更改）": "Read device again (discard local changes)",
@@ -180,7 +181,8 @@ export const englishMessages: Readonly<Record<string, string>> = {
   "连接鼠标后读取真实设置。当前显示的是本地草稿，尚未写入设备。":
     "Connect the mouse to read its actual settings. The current view is a local draft that has not been written to the device.",
   "连接设备 ": "Connect device ",
-  "精确控制，始于你的手感。": "Precise control starts with your feel.",
+  "使用 USB 或无线接收器连接并配置鼠标。":
+    "Connect and configure the mouse using USB or a wireless receiver.",
   "调整性能 ": "Adjust performance ",
   "最大 DPI": "Maximum DPI",
   当前有线最高回报率: "Maximum wired polling rate",
@@ -216,8 +218,8 @@ export const englishMessages: Readonly<Record<string, string>> = {
   添加档位: "Add stage",
   每秒向电脑报告位置的次数:
     "Position reports sent to your computer each second",
-  "有线和 1K 接收器最高 1000 Hz；8K 接收器支持 2000 / 4000 / 8000 Hz。":
-    "Wired and 1K connections support up to 1000 Hz. The 8K receiver supports 2000 / 4000 / 8000 Hz.",
+  "有线和 1K 接收器最高 1000 Hz；8K 接收器支持 2000 / 4000 / 8000 Hz。8K 高回报率为实验性功能，实际报告频率尚未测量；如有异常请改用 1000 Hz。":
+    "Wired and 1K receivers support up to 1000 Hz; 8K receivers support 2000 / 4000 / 8000 Hz. Higher polling rates on 8K receivers are experimental; the actual report rate has not been measured. Switch to 1000 Hz if you encounter problems.",
   抬起高度: "Lift-off distance",
   鼠标离开表面时的停止追踪高度: "Height above the surface where tracking stops",
   "当前值：": "Current value: ",
@@ -284,8 +286,8 @@ export const englishMessages: Readonly<Record<string, string>> = {
   "{0} 分钟": "{0} min",
   低电量模式阈值: "Low-battery threshold",
   "8K 接收器指示灯": "8K receiver indicator",
-  选择连接状态显示或仅低电量提醒:
-    "Show connection status or low-battery alerts only",
+  "实验性设置；切换到“显示连接状态”后，读取完整配置可能超时。请重新读取检查。":
+    "Experimental setting. Reading all settings may time out after switching to “Show connection status”. Read the device again to check the result.",
   接收器指示灯模式: "Receiver indicator mode",
   显示连接状态: "Show connection status",
   仅低电量提醒: "Low-battery alerts only",
@@ -317,8 +319,8 @@ export const englishMessages: Readonly<Record<string, string>> = {
   "设备配置已恢复并重新读取。": "Device profile reset and read again.",
   恢复当前配置: "Reset current profile",
   "将鼠标恢复出厂设置？": "Restore mouse factory settings?",
-  "此操作会清除设备内的自定义设置，并断开连接。请先导出所有需要的配置及宏。恢复命令来自原程序，尚未在这只鼠标上执行测试。":
-    "This clears custom settings on the device and disconnects it. Export all profiles and macros you need first. This command comes from the original software and has not been tested on this mouse.",
+  "此操作会清除设备内的自定义设置，并断开连接。请先导出所有需要的配置及宏。此功能为实验性，尚未完成实机验证；执行后请重新连接并检查配置和宏。":
+    "This clears custom settings on the device and disconnects it. Export all profiles and macros you need first. This feature is experimental and has not been verified on hardware. Reconnect afterward and check profiles and macros.",
   发送出厂恢复命令: "Send factory reset command",
   "出厂恢复命令已发送。设备已断开，请重新连接并检查实际状态。":
     "Factory reset command sent. Device disconnected. Reconnect and check its actual state.",
@@ -343,28 +345,6 @@ export const englishMessages: Readonly<Record<string, string>> = {
   " · {0} 字节": " · {0} bytes",
   "连接设备后，这里会保留每个候选通道的结果；连接失败也可导出诊断。":
     "Results for each candidate channel appear here after a connection attempt. Diagnostics can also be exported after a failed connection.",
-  功能验证状态: "Feature verification",
-  "DPI、回报率、消抖、LOD、传感器开关、按键、灯光":
-    "DPI, polling rate, debounce, LOD, sensor switches, buttons, lighting",
-  已实机读取: "Read on real hardware",
-  写入设置: "Write settings",
-  每次写入后回读验证: "Readback verification after every write",
-  "宏录制、编辑、设备上传与按键绑定":
-    "Macro recording, editing, device upload, and button binding",
-  源程序协议已恢复: "Original protocol recovered",
-  "1K 接收器配对": "1K receiver pairing",
-  已实机验证: "Verified on real hardware",
-  "8K 接收器配对与配置读取": "8K receiver pairing and settings read",
-  "8K 高回报率和接收器灯光": "8K polling rates and receiver lighting",
-  "部分验证，仍有待验收项": "Partially verified; more checks remain",
-  "USB 有线固件刷写": "USB wired firmware flashing",
-  "1.0.1.7 已完成一次有线实机验证":
-    "1.0.1.7 verified in one wired hardware flash",
-  宏移动轨迹和实时无线信号: "Macro movement paths and live wireless signal",
-  尚未实现: "Not implemented",
-  "Windows 指针速度、开机启动、系统托盘":
-    "Windows pointer speed, startup, system tray",
-  浏览器不提供系统控制: "System controls unavailable in the browser",
   通信记录: "Communication log",
   "仅记录本页与鼠标的配置报文，不记录日常键鼠输入。":
     "Only this page’s device configuration reports are logged. Everyday keyboard and mouse input is not recorded.",
@@ -378,7 +358,8 @@ export const englishMessages: Readonly<Record<string, string>> = {
     "Selecting a profile while connected switches the device slot. Offline changes only edit local drafts.",
   导入: "Import",
   导出: "Export",
-  设置直接写入设备: "Settings written directly to the device",
+  "配置保存在本机":
+    "Profiles stored locally",
   "Chrome / Edge 通过 WebHID 连接。配置保留在本机浏览器，无需账号。":
     "Chrome / Edge connects via WebHID. Profiles stay in this browser. No account required.",
   "已将本地草稿恢复为默认值。尚未修改鼠标。":
@@ -413,8 +394,8 @@ export const englishMessages: Readonly<Record<string, string>> = {
     "Performance changes apply immediately. DPI values save when editing ends; debounce saves when the slider is released.",
   "按键、灯光、电源、档位增删和导入草稿需点击“应用到鼠标”；宏需点击上传。":
     "Button, lighting, power, stage layout, and imported drafts require “Apply to mouse”. Macros require Upload.",
-  "支持配置切换与宏上传；电源管理页提供实验性 USB 有线固件刷写。宏移动轨迹和实时无线信号尚未实现；浏览器无法修改 Windows 系统设置。":
-    "Profile switching and macro upload are supported. Power management includes experimental USB wired firmware flashing. Macro movement paths and live wireless signal are not implemented. The browser cannot change Windows system settings.",
+  "支持配置切换与宏上传；电源管理页提供实验性 USB 有线固件刷写。暂不支持宏移动轨迹和实时无线信号显示；浏览器无法修改 Windows 系统设置。":
+    "Profile switching and macro upload are supported. Power management includes experimental USB wired firmware flashing. Macro movement paths and live wireless signal display are currently unsupported. The browser cannot change Windows system settings.",
   知道了: "Got it",
   界面语言: "Interface language",
   "Pulsar Xlite v4 Mini 浏览器设备配置工具":
@@ -457,8 +438,8 @@ export const englishMessages: Readonly<Record<string, string>> = {
   宏名称: "Macro name",
   未命名宏: "Untitled macro",
   删除当前宏: "Delete current macro",
-  "设备宏名称最多 25 字符；每个宏最多 1000 个原生事件。":
-    "Device macro names support up to 25 characters; each macro supports up to 1,000 native events.",
+  "设备宏名称最多 25 字符；转换为设备宏后最多 1000 个事件。":
+    "Device macro names support up to 25 characters. After conversion to a device macro, the limit is 1,000 events.",
   上传为新设备宏: "Upload as new device macro",
   循环方式: "Loop mode",
   指定次数: "Repeat count",
@@ -694,8 +675,8 @@ export const englishMessages: Readonly<Record<string, string>> = {
     "The device connection changed while setting power options. Read the device again.",
   "电源设置回读不一致，请重新读取设备":
     "Power settings readback does not match. Read the device again.",
-  设备宏数量超过当前实现的安全上限:
-    "The number of device macros exceeds this implementation's safety limit",
+  "暂时无法读取超过 128 个宏的设备。请使用原配置软件整理宏后重试。":
+    "Devices with more than 128 macros cannot currently be read. Reduce the number of macros using the original configuration software and retry.",
   "设备宏列表在读取期间发生变化，请重试":
     "The device macro list changed while reading. Retry.",
   设备宏列表包含重复编号: "The device macro list contains duplicate IDs",
@@ -720,27 +701,27 @@ export const englishMessages: Readonly<Record<string, string>> = {
     "Device settings changed. Read them again before applying settings.",
   "空宏不能写入设备，请先添加事件。":
     "An empty macro cannot be written to the device. Add events first.",
-  "键码 {0} 尚未在原生软件中验证，不能写入设备。":
-    "Key code {0} has not been verified in the native software and cannot be written to the device.",
-  "转换后超过原生软件的 {0} 个事件上限。":
-    "After conversion, the macro exceeds the native software limit of {0} events.",
-  "设备宏字节流格式无效或超出原生容量。":
-    "The device macro byte stream is invalid or exceeds native capacity.",
+  "暂不支持将键码 {0} 写入设备。请移除此按键事件后重试。":
+    "Writing key code {0} to the device is currently unsupported. Remove this key event and retry.",
+  "转换为设备宏后超过 {0} 个事件。请减少事件或缩短延迟后重试。":
+    "After conversion to a device macro, there are more than {0} events. Reduce events or shorten delays and retry.",
+  "设备宏数据格式无效或超出容量限制。请使用原配置软件检查此宏。":
+    "The device macro data format is invalid or exceeds the capacity limit. Check this macro using the original configuration software.",
   "设备宏数据被截断。": "Device macro data is truncated.",
-  "设备宏包含尚未验证的键码 0x{0}。":
-    "The device macro contains unverified key code 0x{0}.",
-  "设备宏包含尚未验证的修饰键组合 0x{0}。":
-    "The device macro contains unverified modifier combination 0x{0}.",
-  "设备宏包含尚未验证的鼠标按键组合 0x{0}。":
-    "The device macro contains unverified mouse button combination 0x{0}.",
-  "设备宏包含尚未验证的滚轮步进值。":
-    "The device macro contains an unverified wheel step value.",
-  "设备宏使用尚有编码歧义的指令 0x{0}，暂不导入，原始数据未修改。":
-    "The device macro uses instruction 0x{0}, whose encoding is ambiguous. Import stopped; raw data was not modified.",
+  "暂不支持设备宏中的键码 0x{0}。请使用原配置软件编辑此宏。":
+    "Key code 0x{0} in this device macro is currently unsupported. Edit this macro using the original configuration software.",
+  "暂不支持设备宏中的修饰键组合 0x{0}。请使用原配置软件编辑此宏。":
+    "Modifier combination 0x{0} in this device macro is currently unsupported. Edit this macro using the original configuration software.",
+  "暂不支持设备宏中的鼠标按键组合 0x{0}。请使用原配置软件编辑此宏。":
+    "Mouse button combination 0x{0} in this device macro is currently unsupported. Edit this macro using the original configuration software.",
+  "暂不支持设备宏中的滚轮步进值 0x{0}。请使用原配置软件编辑此宏。":
+    "Wheel step value 0x{0} in this device macro is currently unsupported. Edit this macro using the original configuration software.",
+  "暂不支持设备宏中的指令 0x{0}，无法导入。请使用原配置软件编辑此宏。":
+    "Instruction 0x{0} in this device macro is currently unsupported, so it cannot be imported. Edit this macro using the original configuration software.",
   "设备宏包含未知指令 0x{0}（偏移 {1}）。":
     "The device macro contains unknown instruction 0x{0} (offset {1}).",
-  "设备宏超出原生事件数量上限。":
-    "The device macro exceeds the native event count limit.",
+  "设备宏超过 {0} 个事件。请使用原配置软件减少事件后重试。":
+    "The device macro exceeds {0} events. Reduce events using the original configuration software and retry.",
   "设备宏 ID 必须在 1–65535 之间。":
     "Device macro IDs must be between 1 and 65535.",
   "宏循环方式无效。": "Invalid macro loop mode.",
@@ -782,8 +763,8 @@ export const englishMessages: Readonly<Record<string, string>> = {
   "第 {0} 行延迟格式无效": "Invalid delay format on line {0}",
   "第 {0} 行包含不支持的键名：{1}":
     "Line {0} contains an unsupported key name: {1}",
-  "第 {0} 行包含尚未验证的鼠标移动事件":
-    "Line {0} contains an unverified mouse movement event",
+  "第 {0} 行包含不支持的鼠标移动事件。请移除此事件后重新导入。":
+    "Line {0} contains an unsupported mouse movement event. Remove this event and import again.",
   "第 {0} 行事件类型 {1} 不受支持":
     "Event type {1} on line {0} is not supported",
   "CSV 中没有宏事件": "No macro events in CSV",
@@ -824,8 +805,8 @@ export const englishMessages: Readonly<Record<string, string>> = {
   "宏 {0} · {1}{2}": "Macro {0} · {1}{2}",
   "快捷键 {0} + {1}": "Shortcut {0} + {1}",
   "原始映射 {0}:{1}:{2}": "Raw mapping {0}:{1}:{2}",
-  "浏览器返回了多个无法区分的配对通道，尚未发送命令。一个接收器也可能提供相同接口；请只保留目标接收器，若仍失败，请导出诊断以完成接口适配。":
-    "The browser returned multiple indistinguishable pairing channels. No commands were sent. Even one receiver may expose identical interfaces. Connect only the target receiver; if it still fails, export diagnostics for interface support.",
+  "浏览器返回了多个无法区分的配对通道，尚未发送命令。请只保留目标接收器后重试；若仍失败，请导出诊断。":
+    "The browser returned multiple indistinguishable pairing channels. No commands were sent. Connect only the target receiver and retry. If it still fails, export diagnostics.",
   "未找到兼容的配对通道（64 字节输入 / 输出报告 0）。请选择原版 1K Dongle 或 8K Dongle；可导出诊断以核对接口。":
     "No compatible pairing channel was found (64-byte input/output report 0). Select an original 1K Dongle or 8K Dongle; export diagnostics to check the interface.",
   "当前 HID 接口不支持配对所需的输入 / 输出报告":

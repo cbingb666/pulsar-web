@@ -1,14 +1,15 @@
-<!-- source: docs/README.md; source-sha256: eb7e88c37e9dcc94b460d9a4093653afcbd8df7a249c610a8583570b1bd5baa3 -->
+<!-- source: docs/README.md; source-sha256: 86ff6c098074e4d62aa8480c6aa5070f0b6a1e7750b54e8916649e0a872b514f -->
 
 # Documentation index
 
 [中文](../README.md) · [English](README.md)
 
-Browse usage guides, protocol descriptions and verification evidence below. Use “中文 / English” at the top of each document to switch languages.
+Browse usage and development guides, protocol descriptions, and verification evidence below. Use “中文 / English” at the top of each document to switch languages.
 
 | Document | Contents |
 | --- | --- |
 | [Getting started and usage](../../README.en.md) | Installation, connection, features, pairing/flashing, limits and license |
+| [Development guide](development.md) | Builds, deployment workflow, project layout, and hardware diagnostics |
 | [Configuration protocol](protocol.md) | Feature packets, registers, verification and receiver compatibility |
 | [Receiver pairing](receiver-pairing-evidence.md) | Official sources, 1K/8K routing, Input/Output pairing and limits |
 | [Firmware flashing](firmware.md) | Accepted hashes, DCDU, interfaces and hardware upgrade evidence |

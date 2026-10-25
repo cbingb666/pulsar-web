@@ -61,8 +61,8 @@ test("long delays use only verified opcodes while preserving exact duration", ()
 test("rejects unknown, ambiguous, malformed and oversized device content without partial decoding", () => {
   assert.throws(() => decodeNativeMacro([3]), /截断/);
   assert.throws(() => decodeNativeMacro([13, 1]), /截断/);
-  assert.throws(() => decodeNativeMacro([8, 0, 0, 0, 0]), /歧义/);
-  assert.throws(() => decodeNativeMacro([34, 1, 2, 3]), /歧义/);
+  assert.throws(() => decodeNativeMacro([8, 0, 0, 0, 0]), /暂不支持/);
+  assert.throws(() => decodeNativeMacro([34, 1, 2, 3]), /暂不支持/);
   assert.throws(() => decodeNativeMacro([1, 3]), /组合/);
   assert.throws(() => decodeNativeMacro([5, 3]), /组合/);
   assert.throws(() => decodeNativeMacro([3, 200]), /键码/);
@@ -75,7 +75,7 @@ test("rejects unknown, ambiguous, malformed and oversized device content without
       encodeNativeMacro({
         events: [{ type: "key", code: "F24", action: "down" }],
       }),
-    /尚未/,
+    /暂不支持/,
   );
   assert.throws(
     () =>

@@ -131,7 +131,10 @@ export function importFusionCsv(text: string, name = t("导入的宏")): Macro {
           type: "wheel",
           direction: label.includes("WheelUp") ? "up" : "down",
         };
-      else throw new Error(t`第 ${index + 2} 行包含尚未验证的鼠标移动事件`);
+      else
+        throw new Error(
+          t`第 ${index + 2} 行包含不支持的鼠标移动事件。请移除此事件后重新导入。`,
+        );
     } else throw new Error(t`第 ${index + 2} 行事件类型 ${image} 不受支持`);
     events.push(validateMacroEvent(event));
   });

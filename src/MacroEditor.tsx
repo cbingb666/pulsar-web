@@ -511,7 +511,7 @@ export function MacroEditor({
             </div>
             <div className="macro-device-upload">
               <span>
-                {t("设备宏名称最多 25 字符；每个宏最多 1000 个原生事件。")}
+                {t("设备宏名称最多 25 字符；转换为设备宏后最多 1000 个事件。")}
               </span>
               <button
                 type="button"

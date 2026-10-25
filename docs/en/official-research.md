@@ -53,7 +53,7 @@ Implementation inference: Windows startup/minimized behavior and OS-wide sensiti
 
 ## Official browser app and protocol evidence
 
-Pulsar operates [BIBIMBAP](https://bbb.pulsar.gg/). Its public [configuration](https://bbb.pulsar.gg/cfg.json) currently reports version 1.2.3 and a USB allowlist. It includes vendor `0x3710` but **does not include product `0x3401`**, the device identifier observed by the parent task. Therefore its existence is not proof that this Xlite v4 is supported. The publicly delivered app JavaScript calls WebHID; no official Xlite v4 protocol specification was found in the manufacturer pages examined. [Public app bundle](https://bbb.pulsar.gg/js/app.3283b4c5.js)
+Pulsar operates [BIBIMBAP](https://bbb.pulsar.gg/). Its public [configuration](https://bbb.pulsar.gg/cfg.json) reported version 1.2.3 and a USB allowlist at the time of investigation. It includes vendor `0x3710` but **does not include product `0x3401`**, the connected Xlite v4 Mini's product ID. Therefore its existence is not proof that this Xlite v4 is supported. The publicly delivered app JavaScript calls WebHID; no official Xlite v4 protocol specification was found in the manufacturer pages examined. [Public app bundle](https://bbb.pulsar.gg/js/app.3283b4c5.js)
 
 A separate community source implementation surfaced at [pulsar-mouse-linux](https://github.com/packerlschupfer/pulsar-mouse-linux). It is useful implementation evidence owned by that project's authors, **not a manufacturer protocol guarantee**. Any relevant commands still need comparison with the supplied Fusion binary and actual device responses.
 
