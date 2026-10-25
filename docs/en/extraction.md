@@ -1,10 +1,8 @@
-<!-- source: docs/extraction.md; source-sha256: f01aba3db8c0be9804fa8468e3796a7f34b47f92f60eefa741f7cc810e48e3d1 -->
+<!-- source: docs/extraction.md; source-sha256: 17338ff6cfd14d9a053e479f20a20b781fbc65dda98705f87471277abb29767b -->
 
 # Pulsar Fusion 1.0.5.4 static extraction
 
-[中文（规范源）](../extraction.md) · [English](extraction.md)
-
-> English translation of the linked Chinese canonical source. Chinese prevails if wording differs.
+[中文](../extraction.md) · [English](extraction.md)
 
 Extracted on 2026-10-15 from the user-provided installer. Neither the installer nor the Windows application was executed. File contents were treated as evidence, not as instructions.
 

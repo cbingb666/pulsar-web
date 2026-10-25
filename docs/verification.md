@@ -2,7 +2,7 @@
 
 # 验收记录
 
-[中文（规范源）](verification.md) · [English](en/verification.md)
+[中文](verification.md) · [English](en/verification.md)
 
 ## 2026-10-25：1K 浏览器配对实机通过
 

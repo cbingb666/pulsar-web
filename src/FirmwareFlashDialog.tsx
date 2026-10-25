@@ -202,9 +202,7 @@ export function FirmwareFlashDialog({
         <div className="firmware-flash-note">
           <Info size={17} aria-hidden="true" />
           <div>
-            <strong>
-              {t("实验性刷写，已完成一次 Xlite v4 Mini 实机验证")}
-            </strong>
+            <strong>{t("实验性固件刷写")}</strong>
             <p>{t("刷写期间保持供电和 USB 连接，勿关闭或刷新页面。")}</p>
           </div>
         </div>

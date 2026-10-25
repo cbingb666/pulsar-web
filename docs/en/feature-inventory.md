@@ -1,10 +1,8 @@
-<!-- source: docs/feature-inventory.md; source-sha256: 997007e7e7f893aafff690c50c44c208a6bd6e6292055b954414e79cb86f694d -->
+<!-- source: docs/feature-inventory.md; source-sha256: 28807114e453aac0d64041653a207f6c0a043a6a90f478085ccc05fe4d27d2ff -->
 
 # Native resource feature inventory
 
-[中文（规范源）](../feature-inventory.md) · [English](feature-inventory.md)
-
-> English translation of the linked Chinese canonical source. Chinese prevails if wording differs.
+[中文](../feature-inventory.md) · [English](feature-inventory.md)
 
 Source: the user-provided Pulsar Fusion 1.0.5.4 installer, statically extracted as documented in `extraction.md`. This inventory describes the native UI resources. Device capabilities and packet layouts require separate implementation or hardware evidence.
 

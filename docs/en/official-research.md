@@ -1,10 +1,8 @@
-<!-- source: docs/official-research.md; source-sha256: 32beef3de911960f5e726464e0fb6ee448df218c07a3ee7119f08d77917a35bf -->
+<!-- source: docs/official-research.md; source-sha256: 6f0ca13a6e3854b8f17404071dac93a283513dea0c762eebb8bba28bb4a7e991 -->
 
 # Pulsar Fusion / Xlite v4 Mini official-source research
 
-[中文（规范源）](../official-research.md) · [English](official-research.md)
-
-> English translation of the linked Chinese canonical source. Chinese prevails if wording differs.
+[中文](../official-research.md) · [English](official-research.md)
 
 Checked 2026-10-15. This inventory distinguishes model-specific documentation, generic Fusion guidance, and browser requirements. It does not establish packet formats or claim hardware verification.
 

@@ -2,7 +2,7 @@
 
 # 原版应用证据
 
-[中文（规范源）](native-evidence.md) · [English](en/native-evidence.md)
+[中文](native-evidence.md) · [English](en/native-evidence.md)
 
 使用 ILSpy 静态反编译提取的 `Pulsar Fusion.exe`，未运行 Windows 应用。反编译参考文件留在 `.local/decompiled/`，不随 Web 应用发布。程序集哈希和提取链见 [提取记录](extraction.md)。
 

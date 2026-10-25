@@ -1324,7 +1324,7 @@ export default function App() {
           </button>
           <div className="build-label">
             <span className="tiny-dot" />
-            Xlite v4 · WebHID<small>{t("基于 Fusion 1.0.5.4 功能研究")}</small>
+            Xlite v4 · WebHID
           </div>
         </div>
       </aside>
@@ -2324,7 +2324,7 @@ export default function App() {
                       {formatFirmwareVersion(snapshot?.firmwareVersion) ??
                         t("连接后读取")}
                       {t(
-                        "。支持 Xlite v4 Mini 有线刷写官方 1.0.1.7 固件；文件校验、设备校验和版本回读分步完成。已完成一次实机刷写与配置核对。",
+                        "。支持通过 USB 数据线为 Xlite v4 Mini 更新官方 1.0.1.7 固件。",
                       )}
                     </p>
                     <button
@@ -2981,11 +2981,6 @@ export default function App() {
                 )}
               </span>
             </div>
-            <p>
-              {t(
-                "不依赖 Windows 驱动。所有设备设置均通过 USB HID 配置接口发送，失败会明确显示，不会当作保存成功。",
-              )}
-            </p>
             <button
               className="button primary"
               onClick={() => setShowHelp(false)}

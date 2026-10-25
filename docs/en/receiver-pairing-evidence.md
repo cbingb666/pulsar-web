@@ -1,10 +1,8 @@
-<!-- source: docs/receiver-pairing-evidence.md; source-sha256: b3367c4b3072a27a3539d1ecf2a4adbe1bb95615d00bea3dbce43596f96d9b7f -->
+<!-- source: docs/receiver-pairing-evidence.md; source-sha256: c1f35496f6149ca1fdfefc0d23ada15610e0fb12465f91a094f1f9553d68b40e -->
 
 # 1K / 8K receiver pairing: recovered official behavior
 
-[中文（规范源）](../receiver-pairing-evidence.md) · [English](receiver-pairing-evidence.md)
-
-> English translation of the linked Chinese canonical source. Chinese prevails if wording differs.
+[中文](../receiver-pairing-evidence.md) · [English](receiver-pairing-evidence.md)
 
 Investigation dates: 2026-10-18 (8K) and 2026-10-25 (1K extension and user acceptance). This record covers the original Pulsar 1K (`3710:5402`) and 8K (`3710:5403`) receivers. The initial 8K static investigation had no hardware and executed no USB commands. An 8K receiver subsequently became available for passive descriptor/feature reads and a production TypeScript routing check through a native adapter; those results are recorded below. The 1K extension was implemented from the official Xlite v4 pairing tool's recovered source and an existing native-adapter capture. After testing the new flow in the local development page, the user confirmed on 2026-10-25 (Asia/Shanghai) that real-device verification passed. No new raw 1K pairing capture was retained for this acceptance. The agent did not send hardware pairing commands. Vendor executables were downloaded, unpacked and decompiled, never run.
 

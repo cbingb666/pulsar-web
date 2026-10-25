@@ -1,10 +1,8 @@
-<!-- source: docs/native-files.md; source-sha256: fa137c822a0f3dc3141a8ee7e8ac4877d0cf2c39088de1b3b4efecd8161d0b4a -->
+<!-- source: docs/native-files.md; source-sha256: 7b8dc6bdb2976f1aa826043cc6e96dcae2ca84ecbe6db44ddf7db4062a3a2ad0 -->
 
 # Native file compatibility
 
-[中文（规范源）](../native-files.md) · [English](native-files.md)
-
-> English translation of the linked Chinese canonical source. Chinese prevails if wording differs.
+[中文](../native-files.md) · [English](native-files.md)
 
 The extracted 1.0.5.4 `MainForm` exposes two file dialogs, both for macro CSV: `fIxcgXPaRc` imports, `jaJcMTrhgE` exports, `ExportListViewToCSV` serializes, and `DbgcQTtOC6` parses (decompiled lines 9220–9370). No native profile-file import/export dialog was found in this version; the Web app adds its own JSON profile backup.
 

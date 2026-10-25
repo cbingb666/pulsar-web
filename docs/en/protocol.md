@@ -1,10 +1,8 @@
-<!-- source: docs/protocol.md; source-sha256: e78b07dd1f3c85b1bf5cd7e489f7287a2c9237f937bae7461de0f27182bb72b0 -->
+<!-- source: docs/protocol.md; source-sha256: 12f7cfb1ccd852cbf7d0d2a5de0d4d2dca398b3a6e1fb0ea6c758cefd9f05187 -->
 
 # Xlite v4 Mini configuration protocol
 
-[中文（规范源）](../protocol.md) · [English](protocol.md)
-
-> English translation of the linked Chinese canonical source. Chinese prevails if wording differs.
+[中文](../protocol.md) · [English](protocol.md)
 
 Investigation date: 2026-10-15; latest acceptance update: 2026-10-19. The implementation targets `3710:3401` (cable) and receivers `3710:5402` (1K) / `3710:5403` (8K). Cable and 1K receiver communication have been verified on the user's Xlite v4 Mini. On firmware `00.00.10.16`, the original 8K Dongle was also tested on hardware: the user confirmed pairing and recovered configuration/DPI operation, and both the production client through a native HID adapter and the browser completed full reads at a configured 8000 Hz. The mouse has since been upgraded over USB to `00.00.10.17`; post-update wireless reconnection was not checked. These results do not measure actual USB report frequency or establish every rate and wireless state.
 

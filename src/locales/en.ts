@@ -148,7 +148,6 @@ export const englishMessages: Readonly<Record<string, string>> = {
   设备工作台: "DEVICE WORKSPACE",
   连接诊断: "Connection diagnostics",
   使用帮助: "Help",
-  "基于 Fusion 1.0.5.4 功能研究": "Based on Fusion 1.0.5.4 research",
   "设备 ": "Device ",
   "USB 已连接": "USB connected",
   "1K 接收器已连接": "1K receiver connected",
@@ -294,8 +293,6 @@ export const englishMessages: Readonly<Record<string, string>> = {
     "Connect and read settings to adjust sleep and low-battery options.",
   固件: "Firmware",
   "当前版本：": "Current version: ",
-  "。支持 Xlite v4 Mini 有线刷写官方 1.0.1.7 固件；文件校验、设备校验和版本回读分步完成。已完成一次实机刷写与配置核对。":
-    ". Supports flashing official 1.0.1.7 firmware to a wired Xlite v4 Mini. File validation, device checksum, and version readback run in separate steps. One hardware flash and configuration comparison have passed.",
   刷写鼠标固件: "Flash mouse firmware",
   查看固件刷写进度: "View flashing progress",
   "打开 Pulsar 官方下载页面 ": "Open Pulsar downloads ",
@@ -418,8 +415,6 @@ export const englishMessages: Readonly<Record<string, string>> = {
     "Button, lighting, power, stage layout, and imported drafts require “Apply to mouse”. Macros require Upload.",
   "支持配置切换与宏上传；电源管理页提供实验性 USB 有线固件刷写。宏移动轨迹和实时无线信号尚未实现；浏览器无法修改 Windows 系统设置。":
     "Profile switching and macro upload are supported. Power management includes experimental USB wired firmware flashing. Macro movement paths and live wireless signal are not implemented. The browser cannot change Windows system settings.",
-  "不依赖 Windows 驱动。所有设备设置均通过 USB HID 配置接口发送，失败会明确显示，不会当作保存成功。":
-    "No Windows driver is required. All device settings use the USB HID configuration interface. Failures are reported and never shown as a successful save.",
   知道了: "Got it",
   界面语言: "Interface language",
   "Pulsar Xlite v4 Mini 浏览器设备配置工具":
@@ -524,8 +519,6 @@ export const englishMessages: Readonly<Record<string, string>> = {
   选择接收器并授权: "Select and authorize the receiver",
   "点击下方按钮，在浏览器设备列表中选择 1K Dongle 或 8K Dongle 并允许访问。 配对期间保持鼠标靠近接收器，等待结果。":
     "Click the button below, choose 1K Dongle or 8K Dongle in the browser’s device list, and allow access. Keep the mouse near the receiver while pairing and wait for the result.",
-  "重新配对会改变现有无线配对关系。不支持 Gen.2。原版 1K 与 8K 接收器配对均已实机验证。取消或超时只停止本页等待，请重新连接检查状态。":
-    "Re-pairing changes the existing wireless pairing. Gen.2 is unsupported. Pairing with original 1K and 8K receivers has been verified on hardware. Canceling or timing out only stops this page’s wait; reconnect to check the actual state.",
   "当前浏览器不支持 WebHID，请使用桌面版 Chrome 或 Edge。":
     "This browser does not support WebHID. Use desktop Chrome or Edge.",
   "正在准备配对…": "Preparing to pair…",
@@ -550,8 +543,6 @@ export const englishMessages: Readonly<Record<string, string>> = {
   关闭固件刷写窗口: "Close firmware flashing dialog",
   "仅支持 Xlite v4 Mini 鼠标本体通过 USB 数据线直接连接电脑刷写。 请只保留这一只目标鼠标，拔下其他 Pulsar 鼠标和接收器。":
     "Flashing supports only the Xlite v4 Mini mouse connected directly to the computer by USB cable. Keep only the target mouse connected and unplug other Pulsar mice and receivers.",
-  "实验性刷写，已完成一次 Xlite v4 Mini 实机验证":
-    "Experimental flashing; verified once on an Xlite v4 Mini",
   "刷写期间保持供电和 USB 连接，勿关闭或刷新页面。":
     "Keep power and USB connected while flashing. Do not close or reload this page.",
   刷写步骤: "Flashing steps",
@@ -911,4 +902,9 @@ export const englishMessages: Readonly<Record<string, string>> = {
   接收器指示灯: "Receiver indicator",
   宏数据长度: "Macro data length",
   宏字节: "Macro byte",
+  "。支持通过 USB 数据线为 Xlite v4 Mini 更新官方 1.0.1.7 固件。":
+    ". Update the Xlite v4 Mini to official firmware 1.0.1.7 using a USB cable.",
+  实验性固件刷写: "Experimental firmware flashing",
+  "重新配对会改变现有无线配对关系。不支持 Gen.2。取消或超时只停止本页等待，请重新连接检查状态。":
+    "Re-pairing changes the existing wireless pairing. Gen.2 is unsupported. Canceling or timing out only stops this page’s wait; reconnect to check the actual state.",
 };

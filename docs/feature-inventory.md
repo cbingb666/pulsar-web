@@ -2,7 +2,7 @@
 
 # 原版资源功能清单
 
-[中文（规范源）](feature-inventory.md) · [English](en/feature-inventory.md)
+[中文](feature-inventory.md) · [English](en/feature-inventory.md)
 
 来源为用户提供的 Pulsar Fusion 1.0.5.4 安装包，静态提取方法见 [提取记录](extraction.md)。本清单描述原版界面资源；设备能力和报文结构仍需单独的实现或硬件证据。
 

@@ -2,7 +2,7 @@
 
 # 原版文件兼容性
 
-[中文（规范源）](native-files.md) · [English](en/native-files.md)
+[中文](native-files.md) · [English](en/native-files.md)
 
 提取的 1.0.5.4 `MainForm` 只有两个文件对话框，均针对宏 CSV：`fIxcgXPaRc` 导入、`jaJcMTrhgE` 导出、`ExportListViewToCSV` 序列化、`DbgcQTtOC6` 解析（反编译行 9220–9370）。该版本没有发现配置文件导入/导出对话框；Web 应用额外提供自己的 JSON 配置备份。
 

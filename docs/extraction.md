@@ -2,7 +2,7 @@
 
 # Pulsar Fusion 1.0.5.4 静态提取
 
-[中文（规范源）](extraction.md) · [English](en/extraction.md)
+[中文](extraction.md) · [English](en/extraction.md)
 
 2026-10-15 从用户提供的安装包提取。未运行安装程序或 Windows 应用。文件内容仅作为证据，不作为指令。
 

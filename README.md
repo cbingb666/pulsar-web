@@ -2,9 +2,9 @@
 
 # Pulsar Fusion Web
 
-[中文（规范源）](README.md) · [English](README.en.md)
+[中文](README.md) · [English](README.en.md)
 
-针对 **Pulsar Xlite v4 Mini** 的 Web 配置工具，支持本地运行和 GitHub Pages，使用 Chrome / Edge 的 WebHID 直接访问鼠标。基于用户提供的 Fusion 1.0.5.4 安装包静态解包、.NET 反编译及已连接鼠标的 HID 报文验证。没有执行 Windows 安装程序。
+针对 **Pulsar Xlite v4 Mini** 的 Web 配置工具，支持本地运行和 GitHub Pages，使用 Chrome / Edge 的 WebHID 直接访问鼠标。
 
 ## 启动
 
@@ -137,13 +137,11 @@ Pages 的 HTTPS 地址可满足 WebHID 的安全上下文要求。首次在部�
 
 原版 CSV 不保存循环方式；循环方式属于设备按键绑定。CSV 逗号键有原程序自身不转义的问题：可以识别原版导入，但导出该键时会提示改用 JSON。JSON 配置为此 Web 版的附加格式，原版此版本的文件对话框仅发现宏 CSV。
 
-## 语言与文档维护
+## 界面语言
 
-界面支持简体中文和 English，顶部可即时切换。首次使用优先检测浏览器支持的中/英语言，不支持时回退 English；手动选择通过本地存储 `pulsar-locale-v1` 记忆。切换语言只改变界面显示，不修改配置、宏、设备协议或设备存储；配置与宏名称保留用户原文。
+通过页面顶部的“中文 / English”即时切换语言。首次使用根据浏览器语言选择中文或英文，不支持时使用 English；之后记住你的选择。切换语言不会更改鼠标设置、配置或宏，配置与宏名称保留用户原文。
 
-**中文是唯一规范源。** 根目录 `README.md` 和 `docs/*.md` 是项目行为、协议证据和验收边界的唯一事实来源。`README.en.md` 和 `docs/en/*.md` 仅是英文译本，不独立维护事实；如有歧义，以中文规范源为准。每篇文档顶部提供语言切换，技术证据目录见 [文档索引](docs/README.md)。
-
-维护顺序：先修改中文规范源，再更新对应英文译文；审阅译文后，以 `shasum -a 256 <中文源路径>` 得到源文件哈希，更新英文文件首行的 `source-sha256`。不要仅更新哈希而不核对译文。执行 `npm run docs:check` 检查所有文档的英文覆盖、源哈希及本地 Markdown 链接；源变化但译文未确认时检查会失败，GitHub Pages 工作流也执行该检查。哈希检测同步状态，不替代翻译语义审阅。
+更多使用说明和技术证据见 [文档索引](docs/README.md)。
 
 ## 项目结构
 

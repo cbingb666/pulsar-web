@@ -2,7 +2,7 @@
 
 # 1K / 8K 接收器配对：恢复的官方行为
 
-[中文（规范源）](receiver-pairing-evidence.md) · [English](en/receiver-pairing-evidence.md)
+[中文](receiver-pairing-evidence.md) · [English](en/receiver-pairing-evidence.md)
 
 调查日期：2026-10-18（8K）、2026-10-25（1K 扩展与用户验收）。覆盖原版 Pulsar 1K（`3710:5402`）和 8K（`3710:5403`）。最初 8K 静态调查没有硬件、未执行 USB 命令；后来有实机被动描述符/Feature 读取及经原生适配器的生产 TypeScript 路由检查，记录如下。1K 根据官方 Xlite v4 工具反编译及既有原生抓包实现。用户在本地开发页测试后，于 2026-10-25（Asia/Shanghai）确认实机通过；未保留新的 1K 原始配对抓包。agent 没有发送实机配对命令。厂商 EXE 仅下载、解包、反编译，从未运行。
 

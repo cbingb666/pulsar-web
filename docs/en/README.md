@@ -1,12 +1,10 @@
-<!-- source: docs/README.md; source-sha256: 2e88ed4f60c5f7bc469916ce7bd134da46c4373aa3654ebfe174f6f395ef95a9 -->
+<!-- source: docs/README.md; source-sha256: eb7e88c37e9dcc94b460d9a4093653afcbd8df7a249c610a8583570b1bd5baa3 -->
 
 # Documentation index
 
-[中文（规范源）](../README.md) · [English](README.md)
+[中文](../README.md) · [English](README.md)
 
-> English translation of the linked Chinese canonical source. Chinese prevails if wording differs.
-
-**Chinese is the sole canonical source; English files are translations.** Change facts first in root `README.md` or the corresponding Chinese document, then synchronize `README.en.md` / `docs/en/`. Source paths and SHA-256 headers detect stale translations; `npm run docs:check` checks coverage, synchronization and local links. Hashes do not replace semantic review. See [maintenance instructions](../../README.en.md#language-and-documentation-maintenance).
+Browse usage guides, protocol descriptions and verification evidence below. Use “中文 / English” at the top of each document to switch languages.
 
 | Document | Contents |
 | --- | --- |
@@ -21,5 +19,3 @@
 | [Native application evidence](native-evidence.md) | .NET controls, protocol and capability evidence |
 | [Resource feature inventory](feature-inventory.md) | Resource keys, native images and desktop-only functions |
 | [Official-source research](official-research.md) | Manuals, website, browser constraints and evidence limits |
-
-[MIT](../../LICENSE) and [third-party notices](../../THIRD_PARTY_NOTICES.md) retain their original legal text. The project's MIT license does not grant redistribution rights for proprietary Pulsar resources. Documentation localization does not alter protocol data or strings in original evidence.

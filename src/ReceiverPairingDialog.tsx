@@ -157,7 +157,7 @@ export function ReceiverPairingDialog({
           <Info size={17} aria-hidden="true" />
           <p>
             {t(
-              "重新配对会改变现有无线配对关系。不支持 Gen.2。原版 1K 与 8K 接收器配对均已实机验证。取消或超时只停止本页等待，请重新连接检查状态。",
+              "重新配对会改变现有无线配对关系。不支持 Gen.2。取消或超时只停止本页等待，请重新连接检查状态。",
             )}
           </p>
         </div>

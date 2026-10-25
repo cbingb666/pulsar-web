@@ -2,7 +2,7 @@
 
 # Xlite v4 Mini 固件刷写
 
-[中文（规范源）](firmware.md) · [English](en/firmware.md)
+[中文](firmware.md) · [English](en/firmware.md)
 
 调查日期：2026-10-19。本实现仅支持原版 Xlite v4 Mini 鼠标通过 USB 数据线刷写已验证的原版 XS1 `1.0.1.7` 固件。正常设备为 `3710:3401`，升级引导器为 `484d:0003`。不接受接收器刷写、无线刷写、其他鼠标、CrazyLight/Gen.2 固件、任意镜像或其他固件版本。
 

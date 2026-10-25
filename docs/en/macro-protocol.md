@@ -1,10 +1,8 @@
-<!-- source: docs/macro-protocol.md; source-sha256: 5e4c4a337b71bc61d1a3326b48fd532eae27f1f6582db8863132d207af4c7b63 -->
+<!-- source: docs/macro-protocol.md; source-sha256: 3ed94224ba3836d7ab0d4fdfd649a5dfee088ba6e03c8a598547fc12a53445b2 -->
 
 # Native macro encoding evidence
 
-[中文（规范源）](../macro-protocol.md) · [English](macro-protocol.md)
-
-> English translation of the linked Chinese canonical source. Chinese prevails if wording differs.
+[中文](../macro-protocol.md) · [English](macro-protocol.md)
 
 Source: user-supplied `PulsarFusionDrvSetup_Ver1.0.5.4.exe`, extracted managed assembly and decompiled into `.local/decompiled/`. No packet writes were performed to derive this codec. The transport layer handles category 6 separately.
 

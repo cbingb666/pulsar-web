@@ -1,10 +1,8 @@
-<!-- source: docs/verification.md; source-sha256: 225e0f80738ce731f0a88ece9a8265f6ef5d8f99ca1439120c19f3f2bca5380b -->
+<!-- source: docs/verification.md; source-sha256: e079294b858c38ea83036299e30fbabc885f934e9fb45cf288e687a954dbd31e -->
 
 # Verification records
 
-[中文（规范源）](../verification.md) · [English](verification.md)
-
-> English translation of the linked Chinese canonical source. Chinese prevails if wording differs.
+[中文](../verification.md) · [English](verification.md)
 
 ## 2026-10-25: 1K browser pairing passed on hardware
 

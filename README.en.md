@@ -1,12 +1,10 @@
-<!-- source: README.md; source-sha256: 5b7bad64ce17400df3f2937254fb1bce55355a021f66cc40802cf47c0ac54b1a -->
+<!-- source: README.md; source-sha256: e19a65aeb0afe025180157783dcfba6f37cdef27bf62b310c738da8426602c8f -->
 
 # Pulsar Fusion Web
 
-[中文（规范源）](README.md) · [English](README.en.md)
+[中文](README.md) · [English](README.en.md)
 
-> English translation of the linked Chinese canonical source. Chinese prevails if wording differs.
-
-A Web configuration tool for **Pulsar Xlite v4 Mini**, available locally or on GitHub Pages, using Chrome / Edge WebHID to access the mouse directly. It is based on static extraction of the user-supplied Fusion 1.0.5.4 installer, .NET decompilation, and HID packet verification on the connected mouse. The Windows installer was never executed.
+A Web configuration tool for **Pulsar Xlite v4 Mini**, available locally or on GitHub Pages, using Chrome / Edge WebHID to access the mouse directly.
 
 ## Getting started
 
@@ -139,13 +137,11 @@ Remaining limits:
 
 Native CSV does not store loop mode; that belongs to the button binding. The native program does not escape the comma key: import recognizes it, while exporting it requests JSON. JSON profile files are a Web extension; only macro CSV dialogs were found in this native version.
 
-## Language and documentation maintenance
+## Interface language
 
-The top bar switches instantly between Simplified Chinese and English. First use checks browser languages for supported Chinese/English, falling back to English when unsupported. Manual choices persist under local-storage key `pulsar-locale-v1`. Switching changes display only, never profiles, macros, protocol or device storage; profile and macro names retain user text.
+Use “中文 / English” in the top bar to switch languages instantly. First use follows supported Chinese/English browser languages, falling back to English; subsequent visits remember your choice. Switching languages does not change mouse settings, profiles or macros. Profile and macro names retain user text.
 
-**Chinese is the sole canonical source.** Root `README.md` and `docs/*.md` alone define behavior, protocol evidence and acceptance limits. `README.en.md` and `docs/en/*.md` are translations, not independently maintained factual sources. Chinese prevails if wording differs. Every document has language links; see the [documentation index](docs/en/README.md).
-
-Update Chinese first, then its English translation. After reviewing the translation, compute `shasum -a 256 <Chinese-source-path>` and update `source-sha256` on the English file's first line. Do not refresh the hash without reviewing the translation. `npm run docs:check` checks English coverage, source hashes and local Markdown links; it fails when a changed source has not been acknowledged in its translation, and also runs in Pages CI. Hash checks detect synchronization, not semantic translation quality.
+See the [documentation index](docs/en/README.md) for further guidance and technical evidence.
 
 ## Project layout
 
@@ -156,7 +152,7 @@ Update Chinese first, then its English translation. After reviewing the translat
 - `src/macros.ts`, `src/macro-codec.ts`, `src/native-files.ts`: editing model, native bytes and CSV.
 - `src/App.tsx`, `src/MacroEditor.tsx`: device pages and editor.
 - `src/i18n.ts`, `src/use-locale.ts`, `src/locales/`: locale detection/persistence, React subscriptions and Chinese/English UI text.
-- `docs/extraction.md`, `docs/native-evidence.md`, `docs/protocol.md`: canonical Chinese extraction, native evidence and protocol; English counterparts live in `docs/en/`.
+- `docs/extraction.md`, `docs/native-evidence.md`, `docs/protocol.md`: extraction, native evidence and protocol; English versions live in `docs/en/`.
 - `scripts/`: optional macOS/hidapi development diagnostics, not Web runtime dependencies.
 - `.local/`: ignored installers, extraction/decompilation, tools and device backups.
 

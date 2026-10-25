@@ -1,10 +1,8 @@
-<!-- source: docs/native-evidence.md; source-sha256: 144b4b4e3702ef8bec3b003b871ce821a42118ad19b9a46a4ced54227d91cdeb -->
+<!-- source: docs/native-evidence.md; source-sha256: 4450afb065295e37f2edde7fd4e37a3ce1136054083d512b0ca2b2be29f4997a -->
 
 # Evidence from the native application
 
-[中文（规范源）](../native-evidence.md) · [English](native-evidence.md)
-
-> English translation of the linked Chinese canonical source. Chinese prevails if wording differs.
+[中文](../native-evidence.md) · [English](native-evidence.md)
 
 The extracted `Pulsar Fusion.exe` was statically decompiled using ILSpy. The Windows application was not executed. Decompiled reference files remain under `.local/decompiled/` and are not shipped with the web app. The source assembly hash and extraction chain are in `extraction.md`.
 

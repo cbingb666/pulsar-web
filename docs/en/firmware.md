@@ -1,10 +1,8 @@
-<!-- source: docs/firmware.md; source-sha256: f30e8aa953f4dccb7ffcf02c8482958c583ad8062e1f79318f37072921ef43e7 -->
+<!-- source: docs/firmware.md; source-sha256: af4be76a82b24f0ebcaa1ff3797080326f06c492dd6a04f9d14bfe2e4d3d190f -->
 
 # Xlite v4 Mini firmware flashing
 
-[中文（规范源）](../firmware.md) · [English](firmware.md)
-
-> English translation of the linked Chinese canonical source. Chinese prevails if wording differs.
+[中文](../firmware.md) · [English](firmware.md)
 
 Investigation date: 2026-10-19. This implementation supports the original Xlite v4 Mini mouse over a USB cable, using the verified original XS1 `1.0.1.7` firmware image. The normal device is `3710:3401`; its updater bootloader is `484d:0003`. Receiver flashing, wireless flashing, other mouse models, CrazyLight/Gen.2 firmware, arbitrary images, and other firmware versions are outside this implementation's accepted scope.
 

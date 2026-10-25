@@ -2,7 +2,7 @@
 
 # 原版宏编码证据
 
-[中文（规范源）](macro-protocol.md) · [English](en/macro-protocol.md)
+[中文](macro-protocol.md) · [English](en/macro-protocol.md)
 
 来源为用户提供的 `PulsarFusionDrvSetup_Ver1.0.5.4.exe`，提取托管程序集并反编译到 `.local/decompiled/`。推导此编解码器时没有向设备写入报文。传输层单独处理类别 6。
 

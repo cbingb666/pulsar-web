@@ -2,7 +2,7 @@
 
 # Pulsar Fusion / Xlite v4 Mini 官方来源调查
 
-[中文（规范源）](official-research.md) · [English](en/official-research.md)
+[中文](official-research.md) · [English](en/official-research.md)
 
 核查日期：2026-10-15。本清单区分型号专属文档、通用 Fusion 指引和浏览器要求，不确立报文格式、不宣称实机验证。
 
