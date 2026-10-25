@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { getHidApi, type HidApi, type HidDevice } from "./hid";
 import type { FirmwareOptions, FirmwarePhase, FirmwareLog } from "./firmware";
 
@@ -21,10 +22,10 @@ export function buildFirmwareCommand(
   report[5] = command;
   if (command === 2) {
     if (!Number.isInteger(length) || length! < 1 || length! > 0xffffffff)
-      throw new Error("固件长度无效");
+      throw new Error(t("固件长度无效"));
     new DataView(report.buffer).setUint32(6, length!, true);
   } else if (length !== undefined) {
-    throw new Error("当前固件命令不接受长度参数");
+    throw new Error(t("当前固件命令不接受长度参数"));
   }
   return report;
 }
@@ -37,7 +38,7 @@ export function buildFirmwareBlocks(bytes: Uint8Array): {
   blocks: Uint8Array<ArrayBuffer>[];
   checksum: number;
 } {
-  if (!bytes.length) throw new Error("固件内容为空");
+  if (!bytes.length) throw new Error(t("固件内容为空"));
   const block = new Uint8Array(SIZE);
   const blocks: Uint8Array<ArrayBuffer>[] = [];
   let checksum = 0;
@@ -59,14 +60,14 @@ export function validateFirmwareReply(
     MAGIC.some((value, index) => bytes[index] !== value) ||
     bytes[5] !== command
   )
-    throw new Error("固件应答与当前命令不匹配，刷写已停止");
-  if (bytes[6] !== 1) throw new Error("设备拒绝固件命令，刷写已停止");
+    throw new Error(t("固件应答与当前命令不匹配，刷写已停止"));
+  if (bytes[6] !== 1) throw new Error(t("设备拒绝固件命令，刷写已停止"));
   if (
     command === 3 &&
     (expectedChecksum === undefined ||
       (bytes[7] | (bytes[8] << 8)) !== expectedChecksum)
   )
-    throw new Error("设备返回的固件校验和不一致，未发送重启命令");
+    throw new Error(t("设备返回的固件校验和不一致，未发送重启命令"));
 }
 
 export class FirmwareConnection {
@@ -97,7 +98,7 @@ export class FirmwareConnection {
       pendingSends.has(device)
     )
       throw new Error(
-        "上一次固件通道操作仍未结束，请等待通道释放后重试；必要时重新插拔鼠标",
+        t("上一次固件通道操作仍未结束，请等待通道释放后重试；必要时重新插拔鼠标"),
       );
     owners.set(device, this.owner);
     this.hid = options.hid ?? getHidApi();
@@ -125,7 +126,7 @@ export class FirmwareConnection {
         return;
       this.disconnected = true;
       const error = new Error(
-        "鼠标在刷写期间断开，结果未确认。请保持 USB 连接并使用官方升级工具恢复。",
+        t("鼠标在刷写期间断开，结果未确认。请保持 USB 连接并使用官方升级工具恢复。"),
       );
       this.waiter?.reject(error);
       this.rejectDisconnected(error);
@@ -133,7 +134,7 @@ export class FirmwareConnection {
     this.abort = () => {
       this.disconnected = true;
       const error = new Error(
-        "固件操作已停止，已发送的命令无法撤回；请保持 USB 连接并检查恢复状态",
+        t("固件操作已停止，已发送的命令无法撤回；请保持 USB 连接并检查恢复状态"),
       );
       this.waiter?.reject(error);
       this.rejectDisconnected(error);
@@ -198,7 +199,7 @@ export class FirmwareConnection {
             () =>
               reject(
                 new Error(
-                  "固件传输超时，已停止发送；请保持 USB 连接并检查恢复状态",
+                  t("固件传输超时，已停止发送；请保持 USB 连接并检查恢复状态"),
                 ),
               ),
             timeout,
@@ -212,7 +213,7 @@ export class FirmwareConnection {
 
   async open(): Promise<void> {
     if (this.disconnected || this.options.signal?.aborted)
-      throw new Error("固件操作已停止，尚未打开刷写通道");
+      throw new Error(t("固件操作已停止，尚未打开刷写通道"));
     if (this.device.opened) return;
     const opening = Promise.resolve()
       .then(() => this.device.open())
@@ -241,12 +242,12 @@ export class FirmwareConnection {
       owners.get(this.device) !== this.owner ||
       pendingSends.has(this.device)
     )
-      throw new Error("固件通道已断开或操作已停止，已停止发送");
+      throw new Error(t("固件通道已断开或操作已停止，已停止发送"));
     this.acceptDisconnect = expectedDisconnect;
     if (log) this.log("out", 0, bytes);
     // Observers may synchronously abort, including component unmount cleanup.
     if (this.options.signal?.aborted || this.disconnected)
-      throw new Error("固件操作已停止，已停止发送");
+      throw new Error(t("固件操作已停止，已停止发送"));
     const sending = this.device.sendReport!(0, bytes);
     pendingSends.set(this.device, sending);
     const settled = () => {
@@ -270,7 +271,7 @@ export class FirmwareConnection {
         () =>
           reject(
             new Error(
-              "固件应答超时，刷写已停止；请保持 USB 连接并检查恢复状态",
+              t("固件应答超时，刷写已停止；请保持 USB 连接并检查恢复状态"),
             ),
           ),
         // The accepted browser flash needed 4945 ms for erase. Leave margin

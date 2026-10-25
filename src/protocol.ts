@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 /** Sonix protocol implementation. Evidence and upstream MIT attribution: docs/protocol.md. */
 export const REPORT_SIZE = 64;
 export const VENDOR_ID = 0x3710;
@@ -72,11 +73,11 @@ export function integerInRange(
   label: string,
 ): number {
   if (!Number.isInteger(value) || value < min || value > max)
-    throw new Error(`${label} must be an integer between ${min} and ${max}`);
+    throw new Error(t`${label}必须是 ${min}–${max} 之间的整数`);
   return value;
 }
 export function checksum(bytes: Uint8Array): number {
-  if (bytes.length < 62) throw new Error("Protocol packet is too short");
+  if (bytes.length < 62) throw new Error(t("协议报文长度不足"));
   return bytes.slice(0, 62).reduce((sum, byte) => sum + byte, 0) & 0xffff;
 }
 export function buildPacket(
@@ -87,10 +88,10 @@ export function buildPacket(
   payload: number[] = [],
 ): Uint8Array<ArrayBuffer> {
   if (payload.length > 55)
-    throw new Error("Payload exceeds the 55-byte packet limit");
+    throw new Error(t("载荷超过 55 字节的报文上限"));
   const packet = new Uint8Array(REPORT_SIZE);
   [category, register, sub, profile, ...payload].forEach((value) =>
-    integerInRange(value, 0, 255, "Packet byte"),
+    integerInRange(value, 0, 255, t("报文字节")),
   );
   packet[1] = category;
   packet[2] = register;
@@ -139,35 +140,35 @@ export function parseDpiStages(
   reply: Uint8Array,
 ): Pick<ProfileSettings, "activeStage" | "dpiStages"> {
   if (reply.length !== REPORT_SIZE)
-    throw new Error("Invalid DPI response length");
-  const count = integerInRange(reply[8], 1, MAX_DPI_STAGES, "DPI stage count");
-  const activeStage = integerInRange(reply[7], 1, count, "Active DPI stage");
+    throw new Error(t("DPI 响应长度无效"));
+  const count = integerInRange(reply[8], 1, MAX_DPI_STAGES, t("DPI 档位数量"));
+  const activeStage = integerInRange(reply[7], 1, count, t("当前 DPI 档位"));
   const view = new DataView(reply.buffer, reply.byteOffset, reply.byteLength);
   const dpiStages = Array.from({ length: count }, (_, index) => {
     const offset = 9 + index * 5;
-    if (reply[offset] !== index + 1) throw new Error("Invalid DPI stage index");
+    if (reply[offset] !== index + 1) throw new Error(t("DPI 档位编号无效"));
     const x = view.getUint16(offset + 1, true),
       y = view.getUint16(offset + 3, true);
-    integerInRange(x, DPI_MIN, DPI_MAX, "DPI X");
-    integerInRange(y, DPI_MIN, DPI_MAX, "DPI Y");
+    integerInRange(x, DPI_MIN, DPI_MAX, t("DPI X 轴"));
+    integerInRange(y, DPI_MIN, DPI_MAX, t("DPI Y 轴"));
     return { x, y, color: [0, 0, 0] as Rgb };
   });
   return { activeStage, dpiStages };
 }
 export function dpiPayload(stages: DpiStage[], activeStage: number): number[] {
-  integerInRange(stages.length, 1, MAX_DPI_STAGES, "DPI stage count");
-  integerInRange(activeStage, 1, stages.length, "Active DPI stage");
+  integerInRange(stages.length, 1, MAX_DPI_STAGES, t("DPI 档位数量"));
+  integerInRange(activeStage, 1, stages.length, t("当前 DPI 档位"));
   const payload = [activeStage, stages.length];
   stages.forEach(({ x, y }, index) => {
-    integerInRange(x, DPI_MIN, DPI_MAX, "DPI X");
-    integerInRange(y, DPI_MIN, DPI_MAX, "DPI Y");
-    if (x % 10 || y % 10) throw new Error("DPI must use 10 DPI increments");
+    integerInRange(x, DPI_MIN, DPI_MAX, t("DPI X 轴"));
+    integerInRange(y, DPI_MIN, DPI_MAX, t("DPI Y 轴"));
+    if (x % 10 || y % 10) throw new Error(t("DPI 必须以 10 DPI 为步长"));
     payload.push(index + 1, x & 255, x >> 8, y & 255, y >> 8);
   });
   return payload;
 }
 export function validateProfile(profile: ProfileSettings): void {
-  integerInRange(profile.profile, 1, PROFILE_COUNT, "Profile");
+  integerInRange(profile.profile, 1, PROFILE_COUNT, t("配置编号"));
   dpiPayload(profile.dpiStages, profile.activeStage);
   if (
     !Number.isFinite(profile.lod) ||
@@ -176,16 +177,16 @@ export function validateProfile(profile: ProfileSettings): void {
     Math.abs(profile.lod * 10 - Math.round(profile.lod * 10)) > 1e-8
   )
     throw new Error(
-      "Lift-off distance must be 0.7–2.0 mm in 0.1 mm increments",
+      t("抬升距离必须在 0.7–2.0 mm 之间，步长为 0.1 mm"),
     );
-  integerInRange(profile.brightness, 0, 255, "Brightness");
-  integerInRange(profile.breatheSpeed, 0, 255, "Breathe speed");
+  integerInRange(profile.brightness, 0, 255, t("亮度"));
+  integerInRange(profile.breatheSpeed, 0, 255, t("呼吸速度"));
   if (!["off", "steady", "breathe"].includes(profile.ledEffect))
-    throw new Error("Invalid LED effect");
+    throw new Error(t("LED 灯光效果无效"));
   for (const stage of profile.dpiStages) {
     if (!Array.isArray(stage.color) || stage.color.length !== 3)
-      throw new Error("Invalid RGB color");
-    stage.color.forEach((value) => integerInRange(value, 0, 255, "RGB color"));
+      throw new Error(t("RGB 颜色无效"));
+    stage.color.forEach((value) => integerInRange(value, 0, 255, t("RGB 颜色")));
   }
   if (
     !profile.buttons ||
@@ -193,43 +194,43 @@ export function validateProfile(profile: ProfileSettings): void {
     typeof profile.buttons !== "object" ||
     BUTTON_IDS.some((id) => !Object.hasOwn(profile.buttons, id))
   )
-    throw new Error("Profile must include every physical button binding");
+    throw new Error(t("配置必须包含所有物理按键的绑定"));
   for (const [button, binding] of Object.entries(profile.buttons)) {
     if (!binding || typeof binding !== "object" || Array.isArray(binding))
-      throw new Error("Invalid button binding");
+      throw new Error(t("按键绑定无效"));
     if (!BUTTON_IDS.includes(Number(button) as (typeof BUTTON_IDS)[number]))
-      throw new Error("Unknown physical button");
+      throw new Error(t("未知的物理按键"));
     [binding.type, binding.a1, binding.a2, binding.a3 ?? 0].forEach((value) =>
-      integerInRange(value, 0, 255, "Button binding"),
+      integerInRange(value, 0, 255, t("按键绑定")),
     );
     if (![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 14, 255].includes(binding.type))
-      throw new Error("Unsupported button binding type");
+      throw new Error(t("不支持的按键绑定类型"));
     if (
       [4, 5, 6].includes(binding.type) &&
       (binding.a1 | (binding.a2 << 8)) === 0
     )
-      throw new Error("Macro binding must reference a valid macro ID");
+      throw new Error(t("宏绑定必须引用有效的宏 ID"));
     if (binding.type === 4)
-      integerInRange(binding.a3 ?? 0, 1, 255, "Macro repeat count");
+      integerInRange(binding.a3 ?? 0, 1, 255, t("宏重复次数"));
     if (binding.type === 9 && binding.a1 === 7) {
-      integerInRange(binding.a3 ?? -1, 0, 255, "DPI lock low byte");
+      integerInRange(binding.a3 ?? -1, 0, 255, t("DPI 锁定低字节"));
       const dpi = (binding.a2 << 8) | (binding.a3 ?? 0);
-      integerInRange(dpi, DPI_MIN, DPI_MAX, "DPI lock");
-      if (dpi % 10) throw new Error("DPI lock must use 10 DPI increments");
+      integerInRange(dpi, DPI_MIN, DPI_MAX, t("DPI 锁定"));
+      if (dpi % 10) throw new Error(t("DPI 锁定值必须以 10 DPI 为步长"));
     }
     if (
       binding.type !== 4 &&
       !(binding.type === 9 && binding.a1 === 7) &&
       binding.a3 !== undefined
     )
-      throw new Error("This button action does not support a third argument");
+      throw new Error(t("此按键动作不支持第三个参数"));
   }
   if (
     !Object.values(profile.buttons).some(
       (binding) => binding.type === 1 && binding.a1 === 1,
     )
   )
-    throw new Error("Keep at least one button assigned to left click");
+    throw new Error(t("请至少保留一个按键用于左键单击"));
 }
 export function validateGlobal(settings: GlobalSettings): void {
   if (
@@ -237,10 +238,10 @@ export function validateGlobal(settings: GlobalSettings): void {
       settings.pollingRate as (typeof POLLING_RATES)[number],
     )
   )
-    throw new Error("Unsupported polling rate");
-  integerInRange(settings.debounce, 0, 15, "Debounce");
+    throw new Error(t("不支持的回报率"));
+  integerInRange(settings.debounce, 0, 15, t("消抖时间"));
   for (const key of ["angleSnap", "rippleControl", "motionSync"] as const)
-    if (typeof settings[key] !== "boolean") throw new Error(`Invalid ${key}`);
+    if (typeof settings[key] !== "boolean") throw new Error(t`参数 ${key} 无效`);
 }
 export const BUTTON_ACTIONS: {
   id: string;
@@ -334,14 +335,14 @@ export function bindingLabel(binding: ButtonBinding): string {
       action.binding.a2 === binding.a2,
   );
   if (binding.type === 9 && binding.a1 === 7)
-    return `DPI 锁定 ${(binding.a2 << 8) | (binding.a3 ?? 0)}`;
+    return t`DPI 锁定 ${(binding.a2 << 8) | (binding.a3 ?? 0)}`;
   if ([4, 5, 6].includes(binding.type))
-    return `宏 ${binding.a1 | (binding.a2 << 8)} · ${["I", "II", "III"][binding.type - 4]}${binding.type === 4 ? ` × ${binding.a3 ?? 1}` : ""}`;
+    return t`宏 ${binding.a1 | (binding.a2 << 8)} · ${["I", "II", "III"][binding.type - 4]}${binding.type === 4 ? ` × ${binding.a3 ?? 1}` : ""}`;
   return (
-    known?.label ??
+    (known ? t(known.label) : undefined) ??
     (binding.type === 2
-      ? `快捷键 ${binding.a1.toString(16)} + ${binding.a2.toString(16)}`
-      : `原始映射 ${binding.type}:${binding.a1}:${binding.a2}`)
+      ? t`快捷键 ${binding.a1.toString(16)} + ${binding.a2.toString(16)}`
+      : t`原始映射 ${binding.type}:${binding.a1}:${binding.a2}`)
   );
 }
 
@@ -375,7 +376,7 @@ export function parseInputReport(
 }
 
 export function dpiLockBinding(dpi: number): ButtonBinding {
-  integerInRange(dpi, DPI_MIN, DPI_MAX, "DPI lock");
-  if (dpi % 10) throw new Error("DPI lock must use 10 DPI increments");
+  integerInRange(dpi, DPI_MIN, DPI_MAX, t("DPI 锁定"));
+  if (dpi % 10) throw new Error(t("DPI 锁定值必须以 10 DPI 为步长"));
   return { type: 9, a1: 7, a2: dpi >> 8, a3: dpi & 255 };
 }

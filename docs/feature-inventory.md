@@ -1,51 +1,55 @@
-# Native resource feature inventory
+<!-- canonical-language: zh-CN -->
 
-Source: the user-provided Pulsar Fusion 1.0.5.4 installer, statically extracted as documented in `extraction.md`. This inventory describes the native UI resources. Device capabilities and packet layouts require separate implementation or hardware evidence.
+# 原版资源功能清单
 
-## Navigation and settings
+[中文（规范源）](feature-inventory.md) · [English](en/feature-inventory.md)
 
-Native translation sections: `CN`, `EN`, `JP`, `KR`, `FR`, `SP`, `DE`, `RU`; the configured language availability mask is `1,1,1,1,1,1,1,0`. The Xlite V4 resource defaults to English and UI folder `XliteV4`.
+来源为用户提供的 Pulsar Fusion 1.0.5.4 安装包，静态提取方法见 [提取记录](extraction.md)。本清单描述原版界面资源；设备能力和报文结构仍需单独的实现或硬件证据。
 
-Navigation keys: Home, Customize, Performance, Macro, Power, Settings, Select Device, Support. Device state distinguishes wired and wireless mode. Profile actions include selection, rename and reset. Button remapping requires at least one left-click assignment.
+## 导航与设置
 
-| Area | Native features evidenced by resource keys |
+原版翻译节为 `CN`、`EN`、`JP`、`KR`、`FR`、`SP`、`DE`、`RU`；语言可用掩码为 `1,1,1,1,1,1,1,0`。Xlite V4 资源默认英语，界面文件夹为 `XliteV4`。
+
+导航键包括 Home、Customize、Performance、Macro、Power、Settings、Select Device、Support。设备状态区分有线和无线。配置操作有选择、重命名和恢复；按键映射要求至少保留一个左键。
+
+| 区域 | 资源键证明的原版功能 |
 | --- | --- |
-| DPI | Stage count; DPI switcher; individual colors; LED steady, breath or off; brightness; speed |
-| Performance | Polling rate; angle snap; motion sync; ripple control; debounce time; lift-off distance; restore |
-| Sleep and power | Auto-off time with infinite option; wireless power-saving timeout; low-power battery threshold |
-| Receiver | Connection stability with excellent/good/fair/poor labels; LED connection indication or battery-warning-only mode |
-| Profiles | Profile selection, name editing, reset; profile-cycle, next and previous mappings |
-| Basic button mapping | Left/right/middle/back/forward; separate right-side buttons for applicable models; disabled; scroll up/down; left double-click |
-| DPI mapping | DPI cycle, increase, decrease; polling-rate switch |
-| Keyboard mapping | Keyboard key plus optional modifiers |
-| Media mapping | Player, play/pause, next, previous, volume up/down, mute, stop |
-| Shortcut mapping | Calculator, My PC, home, refresh, Explorer, email, brightness up/down |
-| Macro playback | Fixed repeat count; repeat while held; repeat until toggled |
-| Macro editing | Create/rename/list/delete; record/stop; keyboard/mouse capture; recorded/default/no delay; key delay and interval; clear delays; insert key or delay; save/import/export |
+| DPI | 档位数量、切换、各档颜色、指示灯常亮/呼吸/关闭、亮度、速度 |
+| 性能 | 回报率、角度捕捉、Motion Sync、波纹控制、消抖、LOD、恢复 |
+| 休眠和电源 | 自动关闭时间及无限选项、无线节能超时、低电量阈值 |
+| 接收器 | 连接稳定性（优秀/良好/一般/较差）、连接状态灯或仅低电量提醒 |
+| 配置 | 选择、名称编辑、恢复、循环/下一个/上一个配置映射 |
+| 基础映射 | 左/右/中/后退/前进；适用型号的右侧按键；禁用；向上/向下滚动；左键双击 |
+| DPI 映射 | DPI 循环、增加、降低、回报率切换 |
+| 键盘映射 | 键盘按键及可选修饰键 |
+| 多媒体映射 | 播放器、播放/暂停、下一曲、上一曲、音量增减、静音、停止 |
+| 快捷功能映射 | 计算器、我的电脑、主页、刷新、资源管理器、邮件、亮度增减 |
+| 宏播放 | 固定次数、按住循环、再次按下停止 |
+| 宏编辑 | 新建/重命名/列表/删除；录制/停止；键鼠捕获；录制/默认/无延迟；按键延迟及间隔；清除延迟；插入按键或延迟；保存/导入/导出 |
 
-Copy, cut, paste and switch-app keys exist but their English values are empty. A native usage path must be verified before treating these as supported functions.
+复制、剪切、粘贴和切换应用的资源键存在，但英文值为空。需确认原版实际使用路径后才能视为支持。
 
-## Desktop-specific controls
+## 桌面专用控制
 
-The native UI also includes launch-at-startup, launch-minimized, and Windows pointer settings (sensitivity, scrolling speed, pointer precision, whole-page scrolling and double-click speed). Browser-only implementations cannot assume access to these operating-system preferences through WebHID. Device settings and local web-app settings must be distinguished explicitly.
+原版还有开机启动、最小化启动，以及 Windows 指针设置（灵敏度、滚轮速度、指针精度、整页滚动和双击速度）。纯浏览器实现不能假定 WebHID 可以修改操作系统偏好，必须明确区分设备设置与网页本地设置。
 
-## Xlite V4 imagery
+## Xlite V4 图片
 
-All paths below are inside `.local/extracted/fusion/Config/XliteV4/`.
+以下路径均位于 `.local/extracted/fusion/Config/XliteV4/`。
 
-| Asset | Dimensions | Use |
+| 资源 | 尺寸 | 用途 |
 | --- | --- | --- |
-| `Device.png` | 309 × 565 | Device view |
-| `Device_Performance.png` | 309 × 565 | Performance view, same bytes as device view |
-| `Device_Customize.png` | 471 × 565 | Mouse plus existing button leader lines |
-| `CompanyName.png` | 128 × 43 | Branding |
-| `005_Product Card_default.png`, `005_Product Card_hover.png` | 268 × 427 | Product card states |
-| `Home_*`, `Customize_*` | approximately 28 × 28 | Navigation states |
-| `Performance_*`, `Macro_*` | 26 × 27 | Navigation states |
-| `Wired.png`, `Wireless.png` | 22 × 22, 28 × 21 | Connection state |
-| `Receiver.png` | 382 × 712 | Receiver view |
-| `No Device.png` | 91 × 91 | Empty device state |
+| `Device.png` | 309 × 565 | 设备视图 |
+| `Device_Performance.png` | 309 × 565 | 性能视图，字节与设备视图相同 |
+| `Device_Customize.png` | 471 × 565 | 鼠标与现成按键引线 |
+| `CompanyName.png` | 128 × 43 | 品牌 |
+| `005_Product Card_default.png`、`005_Product Card_hover.png` | 268 × 427 | 产品卡片状态 |
+| `Home_*`、`Customize_*` | 约 28 × 28 | 导航状态 |
+| `Performance_*`、`Macro_*` | 26 × 27 | 导航状态 |
+| `Wired.png`、`Wireless.png` | 22 × 22、28 × 21 | 连接状态 |
+| `Receiver.png` | 382 × 712 | 接收器视图 |
+| `No Device.png` | 91 × 91 | 无设备状态 |
 
-The theme file supplies title background RGB `(0,128,255)`, white title foreground and left-panel RGB `(250,250,252)`. Layout, control dimensions and runtime visibility must come from the .NET application's form definitions, not inferred from the theme alone.
+主题文件提供标题背景 RGB `(0,128,255)`、白色标题前景、左面板 RGB `(250,250,252)`。布局、控件尺寸和运行时可见性应以 .NET 表单定义为准，不能仅从主题推断。
 
-The original resources are retained locally for analysis and comparison; their presence is not a claim of ownership or redistribution permission.
+原版资源仅保留用于本地分析和对照；其存在不代表拥有所有权或再分发许可。

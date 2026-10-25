@@ -1,62 +1,66 @@
-# Pulsar Fusion / Xlite v4 Mini official-source research
+<!-- canonical-language: zh-CN -->
 
-Checked 2026-10-15. This inventory distinguishes model-specific documentation, generic Fusion guidance, and browser requirements. It does not establish packet formats or claim hardware verification.
+# Pulsar Fusion / Xlite v4 Mini 官方来源调查
 
-## Model and software
+[中文（规范源）](official-research.md) · [English](en/official-research.md)
 
-The official download page explicitly assigns Fusion **V1.0.5.4 (2025-06-26, connection optimization)** to Xlite v4 Mini. Earlier release notes mention DPI-stage and macro fixes. Firmware is a separate download. [Pulsar downloads](https://www.pulsar.gg/pages/download)
+核查日期：2026-10-15。本清单区分型号专属文档、通用 Fusion 指引和浏览器要求，不确立报文格式、不宣称实机验证。
 
-Xlite v4 Mini uses XS-1, supports up to 32,000 DPI, programmable buttons/macros and Motion Sync. The included receiver supports 1K; 8K requires the optional 8K receiver. The desktop configuration software requires Windows. [Model product page](https://www.pulsar.gg/products/xlite-v4-mini-gaming-mouse)
+## 型号与软件
 
-## Model-specific values
+官方下载页明确为 Xlite v4 Mini 提供 Fusion **V1.0.5.4（2025-06-26，连接优化）**。更早说明提及 DPI 档位和宏修复。固件单独下载。[Pulsar 下载](https://www.pulsar.gg/pages/download)
 
-The official quick guide, inspected visually on pages 1–3, supplies these values:
+Xlite v4 Mini 使用 XS-1，最高 32,000 DPI，支持按键/宏编程及 Motion Sync。随附接收器为 1K；8K 需另购接收器。桌面配置软件要求 Windows。[产品页](https://www.pulsar.gg/products/xlite-v4-mini-gaming-mouse)
 
-| Setting | Documented behavior |
+## 型号专属数值
+
+目视检查官方快速指南第 1–3 页，得到：
+
+| 设置 | 文档行为 |
 | --- | --- |
-| DPI | 50–32,000; increments of 10; default active DPI 800 |
-| DPI stages, page 2 | 400, 800, 1600, 3200, 6400, 12800 |
-| Stage indicator colors | Light blue, blue, light green, yellow, orange, pink |
-| Polling | 125, 250, 500, 1000 Hz; 2000/4000/8000 Hz with 8K receiver |
-| LOD | 0.7, 1, 2 mm |
-| Inputs | Left/right, wheel, forward/back, underside DPI button |
-| Pairing gesture | Hold left, right and wheel buttons together for 3–4 seconds |
+| DPI | 50–32,000；步长 10；默认活动 DPI 800 |
+| DPI 档位（第 2 页） | 400、800、1600、3200、6400、12800 |
+| 档位颜色 | 浅蓝、蓝、浅绿、黄、橙、粉 |
+| 回报率 | 125、250、500、1000 Hz；8K 接收器增加 2000/4000/8000 |
+| LOD | 0.7、1、2 mm |
+| 输入 | 左/右、滚轮、前进/后退、底部 DPI 键 |
+| 配对手势 | 左键、右键、滚轮同时按住 3–4 秒 |
 
-The guide contains an inconsistency: page 2 lists six DPI stages, but page 3's compact specification lists only 400/800/1600/3200. Actual configuration readback must decide defaults and enabled stages; never overwrite them from documentation alone. [Official quick guide PDF](https://www.pulsar.gg/cdn/shop/files/Manual_Xlite_v4_Quick_Guide.pdf?v=13613901784141965113)
+指南有矛盾：第 2 页列六档，第 3 页简表仅列 400/800/1600/3200。默认值及启用档位以实际回读为准，不能仅据文档覆盖。[官方快速指南 PDF](https://www.pulsar.gg/cdn/shop/files/Manual_Xlite_v4_Quick_Guide.pdf?v=13613901784141965113)
 
-## Functional inventory and UI evidence
+## 功能清单和界面证据
 
-Pulsar's generic Fusion FAQ documents device selection; language/startup/minimized preferences; firmware and battery status; button assignments; debounce; auto sleep; profiles; import/export/restore; Motion Sync; DPI stages; polling; sensitivity; LOD; double-click speed; angle snapping; ripple control; DPI LED color/brightness/effect; and macro recording/editing/assignment. Its screenshots show older **Fusion Wireless Mice V1.2.7**, so exact version-specific controls must come from the supplied executable. The FAQ's three-stage claim also conflicts with the Xlite v4 guide. [Official Fusion FAQ](https://eu.pulsar.gg/pages/faq)
+Pulsar 通用 Fusion FAQ 包括设备选择、语言/启动/最小化偏好、固件/电量、按键、消抖、休眠、配置、导入/导出/恢复、Motion Sync、DPI 档位、回报率、灵敏度、LOD、双击速度、角度捕捉、波纹控制、DPI 灯颜色/亮度/效果及宏录制/编辑/分配。截图却为较早的 **Fusion Wireless Mice V1.2.7**，准确版本控件须以提供的 EXE 为准。FAQ 的三档说法也与 Xlite v4 指南冲突。[官方 Fusion FAQ](https://eu.pulsar.gg/pages/faq)
 
-The product-page software illustration uses a light interface, blue accents, a left sidebar labeled **HOME / CUSTOMIZE / PERFORMANCE / MACRO**, and a right sidebar for language/device/profile plus application settings. [Official software illustration](https://www.pulsar.gg/cdn/shop/files/Pulsar_mouse_software_N1.png?v=1721033524)
+产品页软件图为浅色、蓝色强调色，左导航 **HOME / CUSTOMIZE / PERFORMANCE / MACRO**，右侧为语言/设备/配置及应用设置。[官方软件图](https://www.pulsar.gg/cdn/shop/files/Pulsar_mouse_software_N1.png?v=1721033524)
 
-Additional official screenshot references (older dark UI, useful for feature grouping only):
+补充官方截图（较旧深色界面，仅用于功能分组参考）：
 
-- [Device selection](https://eu.pulsar.gg/cdn/shop/files/UwrNK_Sz2oDLxHAtnofOhLGFvg7tMpsAzw.png?v=1725342755)
-- [Application preferences, visibly V1.2.7](https://eu.pulsar.gg/cdn/shop/files/Or6qHa6UvXCzDQCvfXXhZ4_RZ6z3ZcuZYg.png?v=1725342796)
-- [Button assignment / performance](https://eu.pulsar.gg/cdn/shop/files/awUFYBPFHyja7-IpG2nPftmrUel2rqYznw.png?v=1725342813)
-- [Macro UI](https://eu.pulsar.gg/cdn/shop/files/0K8nnWKSEMn5SDdLUziXKZsPFlPdaO19fQ.png?v=1725342829)
+- [设备选择](https://eu.pulsar.gg/cdn/shop/files/UwrNK_Sz2oDLxHAtnofOhLGFvg7tMpsAzw.png?v=1725342755)
+- [应用偏好，明确为 V1.2.7](https://eu.pulsar.gg/cdn/shop/files/Or6qHa6UvXCzDQCvfXXhZ4_RZ6z3ZcuZYg.png?v=1725342796)
+- [按键/性能](https://eu.pulsar.gg/cdn/shop/files/awUFYBPFHyja7-IpG2nPftmrUel2rqYznw.png?v=1725342813)
+- [宏界面](https://eu.pulsar.gg/cdn/shop/files/0K8nnWKSEMn5SDdLUziXKZsPFlPdaO19fQ.png?v=1725342829)
 
-## Browser constraints
+## 浏览器限制
 
-WebHID supports input, output and feature reports, permission-filtered by USB vendor/product and HID usage. Inspect every returned HID interface and its `collections`, then open the vendor-specific configuration interface. Chrome protects generic mouse/keyboard collections; access to a mouse does not imply access to its ordinary movement or button reports. Feature reports can carry configuration in both directions, but their format is device-specific. `sendFeatureReport(reportId, payload)` separates the report ID from payload bytes; distinguish this from native HID libraries that prepend the ID. Reconnect/disconnect events and previously authorized devices are supported. [Chrome WebHID guide](https://developer.chrome.com/docs/capabilities/hid)
+WebHID 支持 Input、Output、Feature 报告，权限可按 USB 厂商/产品和 HID usage 筛选。须检查返回的每个 HID 接口及 `collections`，再打开厂商配置接口。Chrome 保护通用键鼠 collection；可访问鼠标不等于可访问普通移动/按键报告。Feature 可双向配置，但格式为设备专属。`sendFeatureReport(reportId, payload)` 将 ID 与载荷分开，不同于在前面加 ID 的原生库。支持重连/断连事件及已授权设备。[Chrome WebHID 指南](https://developer.chrome.com/docs/capabilities/hid)
 
-The API requires a secure context and device requests require transient user activation. Consequently connection needs a user-triggered chooser on HTTPS or a trustworthy local development origin; it cannot silently acquire a new device. WebHID is available in desktop Chromium-based browsers including Chrome/Edge, while individual browsers may disable it. [Specification](https://hid.spec.whatwg.org/), [implementation status](https://github.com/whatwg/hid)
+API 要求安全上下文，设备请求要求短暂用户激活。因此新授权需 HTTPS 或可信本地开发源的用户触发选择器，不能静默取得新设备。Chrome/Edge 等桌面 Chromium 浏览器提供 WebHID，具体浏览器可能禁用。[规范](https://hid.spec.whatwg.org/)、[实现状态](https://github.com/whatwg/hid)
 
-For reads, `receiveFeatureReport()` returns the operating system's report data. The first byte **may** contain a report ID; the standard does not guarantee that it always does. Validate length and framing against the known report layout instead of blindly removing byte zero. [Specification source](https://github.com/whatwg/hid/blob/main/index.html)
+`receiveFeatureReport()` 返回操作系统报告数据。首字节**可能**包含 report ID，标准不保证总有。应按已知报告布局校验长度和封装，不能盲目删除字节零。[规范源码](https://github.com/whatwg/hid/blob/main/index.html)
 
-Implementation inference: Windows startup/minimized behavior and OS-wide sensitivity/double-click/scroll settings cannot be equated with device configuration. The web implementation must label these limitations instead of pretending a local slider changed the operating system. Browser macro capture is limited to events delivered to the active page; device-stored macro playback is a separate protocol feature that must be verified.
+实现推论：Windows 启动/最小化及系统灵敏度/双击/滚轮不能等同设备配置。网页须标明边界，不能假装本地滑块改变系统。宏捕获仅限活动页面收到的事件；设备存储宏播放是另一项需验证的协议功能。
 
-## Official browser app and protocol evidence
+## 官方网页和协议证据
 
-Pulsar operates [BIBIMBAP](https://bbb.pulsar.gg/). Its public [configuration](https://bbb.pulsar.gg/cfg.json) currently reports version 1.2.3 and a USB allowlist. It includes vendor `0x3710` but **does not include product `0x3401`**, the device identifier observed by the parent task. Therefore its existence is not proof that this Xlite v4 is supported. The publicly delivered app JavaScript calls WebHID; no official Xlite v4 protocol specification was found in the manufacturer pages examined. [Public app bundle](https://bbb.pulsar.gg/js/app.3283b4c5.js)
+Pulsar 提供 [BIBIMBAP](https://bbb.pulsar.gg/)。其公开 [配置](https://bbb.pulsar.gg/cfg.json) 当时为 1.2.3 和 USB 允许列表，含厂商 `0x3710`，但**没有本机产品 `0x3401`**。它的存在不能证明支持此 Xlite v4。公开 JavaScript 调用 WebHID；所查厂商页面未找到官方 Xlite v4 协议规范。[公开应用包](https://bbb.pulsar.gg/js/app.3283b4c5.js)
 
-A separate community source implementation surfaced at [pulsar-mouse-linux](https://github.com/packerlschupfer/pulsar-mouse-linux). It is useful implementation evidence owned by that project's authors, **not a manufacturer protocol guarantee**. Any relevant commands still need comparison with the supplied Fusion binary and actual device responses.
+另发现社区 [pulsar-mouse-linux](https://github.com/packerlschupfer/pulsar-mouse-linux)。这是属于其作者的有用实现证据，**不是厂商协议保证**；相关命令仍需与提供的 Fusion 二进制和实机响应对照。
 
-## Acceptance implications
+## 验收要求
 
-- Use device readback for initial state, stage counts, available polling rates and firmware-dependent options.
-- Count configuration writes as successful only after transport completion and, where supported, matching readback.
-- Test wired and receiver transports separately; 8K capability must follow the attached receiver.
-- Keep local profile/macro editing distinct from confirmed device storage.
-- Do not claim full parity before testing every exposed control against Fusion and the actual hardware.
+- 初态、档位数量、可用回报率和固件选项以设备回读为准。
+- 写配置须传输完成，支持时还需目标回读匹配才算成功。
+- 有线与接收器单独测试，8K 能力取决于实际接收器。
+- 区分本地配置/宏编辑和已确认设备存储。
+- 未将每个可见控件与 Fusion 和实机对照前，不宣称完全等价。

@@ -2183,3 +2183,45 @@ main {
   color: #b16c64;
   border-color: #e9d6d3;
 }
+
+.locale-select {
+  width: auto;
+  min-width: 86px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+}
+.topbar-right {
+  flex-wrap: wrap;
+}
+.topbar {
+  min-height: 67px;
+  height: auto;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+html[lang="en"] .nav-item {
+  gap: 8px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+html[lang="en"] .nav-item > svg {
+  flex-shrink: 0;
+}
+@media (max-width: 720px) {
+  .topbar {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .topbar-right {
+    gap: 8px;
+  }
+  .locale-select {
+    min-width: 78px;
+    font-size: 11px;
+  }
+}

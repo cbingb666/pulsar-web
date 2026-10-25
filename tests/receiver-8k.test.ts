@@ -375,7 +375,7 @@ for (const failure of [
         failure === "offline"
           ? /状态 05/
           : failure === "unknown mode"
-            ? /Receiver indicator/
+            ? /接收器指示灯/
             : /校验和/,
       );
       assert.deepEqual(fake.settingsWrites(), []);
@@ -459,14 +459,14 @@ for (const mode of [0, 3, 255]) {
       await client.connectDevices([fake.device]);
       await assert.rejects(
         client.readReceiverIndicator(),
-        /Receiver indicator/,
+        /接收器指示灯/,
       );
       await assert.rejects(
         client.writePower({
           sleepSeconds: 120,
           receiverIndicator: mode as 1 | 2,
         }),
-        /Receiver indicator/,
+        /接收器指示灯/,
       );
       assert.deepEqual(fake.settingsWrites(), []);
     } finally {

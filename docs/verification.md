@@ -1,4 +1,8 @@
+<!-- canonical-language: zh-CN -->
+
 # 验收记录
+
+[中文（规范源）](verification.md) · [English](en/verification.md)
 
 ## 2026-10-25：1K 浏览器配对实机通过
 
@@ -193,7 +197,7 @@ node_modules/.bin/tsx scripts/hardware-client-smoke.ts --product-id=0x5402 --wri
 
 用户接入原版 `8K Dongle`（`3710:5403`）后，网页报告多个无法区分的配对通道。被动采集 `.local/8k-passive-20261018T045508Z.json` 证实同一接收器的 MI02、MI03 描述符完全相同，均提供 report ID 0 的 64 字节输入、输出和 Feature Report。两次 `GET_FEATURE(0)` 中，MI02 均返回原生 `0xE0005000` 读取错误；MI03 均返回有效的 64 字节状态 `05` 报文，校验和为 `0005`。采集没有发送配对输出或配置写入。
 
-实现据此增加两接口只读识别：每侧连续读取两次，必须得到一侧稳定读取失败、另一侧稳定有效配置响应，才选择配对接口。未知或不稳定结果、单个共享描述符接口、多个接收器候选、权限错误和超时均停止。错误名称与浏览器行为的证据及限制见 [配对证据](receiver-pairing-evidence.md#real-device-passive-routing-check)。
+实现据此增加两接口只读识别：每侧连续读取两次，必须得到一侧稳定读取失败、另一侧稳定有效配置响应，才选择配对接口。未知或不稳定结果、单个共享描述符接口、多个接收器候选、权限错误和超时均停止。错误名称与浏览器行为的证据及限制见 [配对证据](receiver-pairing-evidence.md#实机被动路由检查)。
 
 `.local/8k-route-check.ts` 导入生产 `resolvePairingInterface`，通过只允许 open/receive/close 的原生 HID 适配器进行实机读取。即使先提供 MI03，仍选中 MI02；结果 `.local/8k-route-check-result.json` 为 `ok: true`、`selectedInterface: 2`。适配器显式转换原生读取错误，不能代替实际 WebHID 的授权、错误映射及完整配对验收。agent 未向硬件发送配对命令。
 

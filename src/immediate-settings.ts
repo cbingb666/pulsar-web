@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import {
   PROFILE_COUNT,
   integerInRange,
@@ -79,7 +80,7 @@ export function buildImmediateSettings(
   switch (change.kind) {
     case "global":
       if (!globalFields.includes(change.field))
-        throw new Error("不支持立即应用此设置");
+        throw new Error(t("不支持立即应用此设置"));
       validateGlobal(snapshot.global);
       Object.assign(next.global, { [change.field]: change.value });
       validateGlobal(next.global);
@@ -100,10 +101,10 @@ export function buildImmediateSettings(
         change.stage,
         1,
         next.profile.dpiStages.length,
-        "DPI stage",
+        t("DPI 档位"),
       );
       if (change.x === undefined && change.y === undefined)
-        throw new Error("请选择要修改的 DPI 轴");
+        throw new Error(t("请选择要修改的 DPI 轴"));
       const stage = next.profile.dpiStages[change.stage - 1];
       if (change.x !== undefined) stage.x = change.x;
       if (change.y !== undefined) stage.y = change.y;
@@ -111,7 +112,7 @@ export function buildImmediateSettings(
       break;
     }
     default:
-      throw new Error("不支持立即应用此设置");
+      throw new Error(t("不支持立即应用此设置"));
   }
   return next;
 }
@@ -123,12 +124,12 @@ export function mergeImmediateSettings(
   change: ImmediateChange,
 ): WorkspaceProfile {
   if (draft.profile.profile !== actual.profile.profile)
-    throw new Error("立即应用的配置与当前编辑配置不一致");
+    throw new Error(t("立即应用的配置与当前编辑配置不一致"));
   const next = clone(draft);
   switch (change.kind) {
     case "global":
       if (!globalFields.includes(change.field))
-        throw new Error("不支持立即应用此设置");
+        throw new Error(t("不支持立即应用此设置"));
       Object.assign(next.global, {
         [change.field]: actual.global[change.field],
       });
@@ -147,7 +148,7 @@ export function mergeImmediateSettings(
           next.profile.dpiStages.length,
           actual.profile.dpiStages.length,
         ),
-        "DPI stage",
+        t("DPI 档位"),
       );
       const stage = next.profile.dpiStages[change.stage - 1];
       const readback = actual.profile.dpiStages[change.stage - 1];
@@ -156,7 +157,7 @@ export function mergeImmediateSettings(
       break;
     }
     default:
-      throw new Error("不支持立即应用此设置");
+      throw new Error(t("不支持立即应用此设置"));
   }
   next.pending =
     !!next.dpiLayoutPending ||
@@ -176,15 +177,15 @@ export async function applyImmediateSetting(
     baseline.profile.profile,
     1,
     PROFILE_COUNT,
-    "Profile",
+    t("配置编号"),
   );
   if (baseline.activeProfile !== profile)
-    throw new Error("请先切换到目标设备配置，再立即应用设置");
+    throw new Error(t("请先切换到目标设备配置，再立即应用设置"));
   if (
     change.kind === "global" &&
     next.global.pollingRate > client.maxPollingRate
   )
-    throw new Error("当前连接最高支持 1000 Hz；更高轮询率需要 8K 接收器");
+    throw new Error(t("当前连接最高支持 1000 Hz；更高轮询率需要 8K 接收器"));
   if (
     same(next.global, baseline.global) &&
     same(next.profile, baseline.profile)
@@ -192,7 +193,7 @@ export async function applyImmediateSetting(
     return next;
 
   if ((await client.readActiveProfile()) !== profile)
-    throw new Error("活动配置已经变化，请重新读取后再应用");
+    throw new Error(t("活动配置已经变化，请重新读取后再应用"));
   // A physical DPI button or another session can change settings after the
   // last snapshot. In particular, DPI writes replace a whole stage block.
   const fresh =
@@ -200,11 +201,11 @@ export async function applyImmediateSetting(
       ? await client.readGlobalSettings()
       : await client.readProfile(profile);
   if ((await client.readActiveProfile()) !== profile)
-    throw new Error("活动配置已经变化，请重新读取后再应用");
+    throw new Error(t("活动配置已经变化，请重新读取后再应用"));
   if (
     !same(fresh, change.kind === "global" ? baseline.global : baseline.profile)
   )
-    throw new Error("设备设置已经变化，请重新读取后再应用");
+    throw new Error(t("设备设置已经变化，请重新读取后再应用"));
   if (change.kind === "global")
     next.global = await client.writeGlobalSettings(
       next.global,
@@ -217,6 +218,6 @@ export async function applyImmediateSetting(
       clone(baseline.profile),
     );
   if ((await client.readActiveProfile()) !== profile)
-    throw new Error("活动配置在写入期间发生变化，请重新读取");
+    throw new Error(t("活动配置在写入期间发生变化，请重新读取"));
   return next;
 }

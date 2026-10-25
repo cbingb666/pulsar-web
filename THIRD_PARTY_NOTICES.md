@@ -28,4 +28,4 @@ SOFTWARE.
 
 ## Supplied Pulsar Fusion resources
 
-`public/assets/pulsar-logo.png`, `xlite-v4.png`, and `xlite-v4-customize.png` were extracted from the user-supplied Pulsar Fusion 1.0.5.4 package for this local reproduction. Their original rights and trademarks remain with AplusX/Pulsar. The original executables and decompiled source are excluded from the application build. This notice does not grant redistribution rights for proprietary resources.
+`public/assets/pulsar-logo.png`, `xlite-v4.png`, `xlite-v4-customize.png`, and `public/favicon.ico` were extracted from the user-supplied Pulsar Fusion 1.0.5.4 package for this local reproduction. Their original rights and trademarks remain with AplusX/Pulsar. The original executables and decompiled source are excluded from the application build. This notice does not grant redistribution rights for proprietary resources.

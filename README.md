@@ -1,4 +1,8 @@
+<!-- canonical-language: zh-CN -->
+
 # Pulsar Fusion Web
+
+[中文（规范源）](README.md) · [English](README.en.md)
 
 针对 **Pulsar Xlite v4 Mini** 的 Web 配置工具，支持本地运行和 GitHub Pages，使用 Chrome / Edge 的 WebHID 直接访问鼠标。基于用户提供的 Fusion 1.0.5.4 安装包静态解包、.NET 反编译及已连接鼠标的 HID 报文验证。没有执行 Windows 安装程序。
 
@@ -18,6 +22,7 @@ npm run dev
 1K 通信遵循原版发送后等待再读取的时序。配对型号查询若发送失败，会在同一连接内做有限恢复（总共最多 4 次）；每次都必须重新查询并验证型号。诊断中的 `identityTries` 记录次数。设置写入不自动重发。
 
 ```sh
+npm run docs:check # 文档译本同步及本地链接校验
 npm test       # 协议、传输、宏与文件格式校验
 npm run build # TypeScript 检查和静态构建
 npm run preview
@@ -29,7 +34,7 @@ npm run preview
 
 ## GitHub Pages 自动部署
 
-[部署工作流](.github/workflows/pages.yml) 在推送到 `main` 或手动运行时执行：`npm ci` → 测试 → TypeScript/Vite 构建 → 发布 `dist/`。工作流不运行硬件测试，也不上传安装包、设备备份或反编译目录。
+[部署工作流](.github/workflows/pages.yml) 在推送到 `main` 或手动运行时执行：`npm ci` → 文档译本校验 → 测试 → TypeScript/Vite 构建 → 发布 `dist/`。工作流不运行硬件测试，也不上传安装包、设备备份或反编译目录。
 
 在仓库 **Settings → Pages → Build and deployment** 中选择 **GitHub Actions**。当前项目的默认站点地址为 `https://cbingb666.github.io/pulsar-web/`；工作流使用 Pages 返回的路径构建，图片和 JS/CSS 会遵循同一子路径。本地开发仍使用 `/`。
 
@@ -128,9 +133,17 @@ Pages 的 HTTPS 地址可满足 WebHID 的安全上下文要求。首次在部�
 - 宏中的鼠标移动轨迹：原生序列化与解析代码的操作码存在矛盾，当前明确拒绝此类事件。长延迟使用多个已确认的 16 位延迟保持总时长。
 - 独立 HID 通知接口的实时无线信号与物理 DPI 按键通知尚未接入；点击重新读取刷新状态。
 - 1K / 8K 配对异常恢复、各回报率逐档验证及实际报告频率测量、灯光模式 1 的完整保存、全部按键动作的实际执行、宏在不同应用中的执行效果、固件刷写中断恢复和破坏性重置尚未完成实机验收。
-- 当前界面为中文 Web 布局，沿用原版资源及功能结构；不是逐像素 WinForms 复制，也未复刻所有语言。
+- 界面支持中文/English，可在页面切换并记住选择；沿用原版资源及功能结构，不是逐像素 WinForms 复制，也未复刻原版其他语言。
 
 原版 CSV 不保存循环方式；循环方式属于设备按键绑定。CSV 逗号键有原程序自身不转义的问题：可以识别原版导入，但导出该键时会提示改用 JSON。JSON 配置为此 Web 版的附加格式，原版此版本的文件对话框仅发现宏 CSV。
+
+## 语言与文档维护
+
+界面支持简体中文和 English，顶部可即时切换。首次使用优先检测浏览器支持的中/英语言，不支持时回退 English；手动选择通过本地存储 `pulsar-locale-v1` 记忆。切换语言只改变界面显示，不修改配置、宏、设备协议或设备存储；配置与宏名称保留用户原文。
+
+**中文是唯一规范源。** 根目录 `README.md` 和 `docs/*.md` 是项目行为、协议证据和验收边界的唯一事实来源。`README.en.md` 和 `docs/en/*.md` 仅是英文译本，不独立维护事实；如有歧义，以中文规范源为准。每篇文档顶部提供语言切换，技术证据目录见 [文档索引](docs/README.md)。
+
+维护顺序：先修改中文规范源，再更新对应英文译文；审阅译文后，以 `shasum -a 256 <中文源路径>` 得到源文件哈希，更新英文文件首行的 `source-sha256`。不要仅更新哈希而不核对译文。执行 `npm run docs:check` 检查所有文档的英文覆盖、源哈希及本地 Markdown 链接；源变化但译文未确认时检查会失败，GitHub Pages 工作流也执行该检查。哈希检测同步状态，不替代翻译语义审阅。
 
 ## 项目结构
 
@@ -140,6 +153,7 @@ Pages 的 HTTPS 地址可满足 WebHID 的安全上下文要求。首次在部�
 - `src/firmware-package.ts`、`src/firmware.ts`、`src/firmware-transport.ts`、`src/FirmwareFlashDialog.tsx`：固定官方固件校验、独立刷写协议与分步授权界面。
 - `src/macros.ts`、`src/macro-codec.ts`、`src/native-files.ts`：宏编辑模型、原生字节流、CSV。
 - `src/App.tsx`、`src/MacroEditor.tsx`：设备页面与宏编辑器。
+- `src/i18n.ts`、`src/use-locale.ts`、`src/locales/`：语言检测/记忆、React 订阅与中英界面文案。
 - `docs/extraction.md`、`docs/native-evidence.md`、`docs/protocol.md`：提取链、源程序证据与协议说明。
 - `scripts/`：仅用于开发验证的 macOS/hidapi 诊断工具，Web 应用不依赖它们。
 - `.local/`：忽略提交的原始安装包提取内容、反编译结果、工具和设备备份。
@@ -155,3 +169,7 @@ node_modules/.bin/tsx scripts/hardware-client-smoke.ts --product-id=0x5402
 ```
 
 原版程序及反编译源码不包含在构建产物中。`public/assets/` 的鼠标和品牌图片、`public/favicon.ico` 的应用图标来自用户提供的软件，用于界面复现；权利仍属于原权利人，本项目不授予这些资源的再分发权利。开源参考实现的 MIT 声明保留在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+## 许可
+
+本项目原创代码及文档使用 [MIT 许可](LICENSE)，版权为 `Copyright (c) 2026 cbingb666`。第三方依赖及引用保留各自许可，见 [第三方声明](THIRD_PARTY_NOTICES.md)。Pulsar 图片、图标、商标及固件的权利仍属于原权利人，项目 MIT 许可不授予这些专有资源的再分发权利。

@@ -251,7 +251,7 @@ test("profile reads reject an active stage outside the device's DPI table", asyn
     );
     const client = new PulsarHidClient();
     client.device = fake.device;
-    await assert.rejects(client.readProfile(1), /Active DPI stage/);
+    await assert.rejects(client.readProfile(1), /当前 DPI 档位/);
   }
 });
 test("DPI packet preserves independent axes and 10 DPI increments", () => {
@@ -263,25 +263,25 @@ test("DPI packet preserves independent axes and 10 DPI increments", () => {
     () => dpiPayload([{ x: 55, y: 100, color: [0, 0, 0] }], 1),
     /10 DPI/,
   );
-  assert.throws(() => dpiPayload(profile.dpiStages, 2), /Active DPI/);
+  assert.throws(() => dpiPayload(profile.dpiStages, 2), /当前 DPI 档位/);
 });
 test("rejects malformed payloads and out-of-range settings before building reports", () => {
   assert.throws(
     () => buildPacket(1, 2, 3, 0, new Array(56).fill(0)),
-    /55-byte/,
+    /55 字节/,
   );
-  assert.throws(() => buildPacket(1, 2, 3, 0, [256]), /Packet byte/);
+  assert.throws(() => buildPacket(1, 2, 3, 0, [256]), /报文字节/);
   assert.throws(
     () => validateGlobal({ ...defaultGlobal(), pollingRate: 16000 }),
-    /polling/,
+    /回报率/,
   );
   assert.throws(
     () => validateProfile({ ...defaultProfile(), lod: 0.75 }),
-    /Lift-off/,
+    /抬升距离/,
   );
   const profile = defaultProfile();
   profile.buttons[1] = { type: 0, a1: 0, a2: 0 };
-  assert.throws(() => validateProfile(profile), /left click/);
+  assert.throws(() => validateProfile(profile), /左键单击/);
 });
 test("rejects busy, stale profile, stale button and truncated responses", () => {
   const command = readCommand(4, 1, 6, 2, [4, 255], 4);
@@ -922,7 +922,7 @@ test("whole settings batch is validated before the first write", async () => {
       { ...original, global: { ...original.global, pollingRate: 16000 } },
       original,
     ),
-    /polling/,
+    /回报率/,
   );
   assert.equal(fake.writes.length, 0);
 });
@@ -1069,7 +1069,7 @@ test("macro name/content validation happens before allocation", async () => {
   );
   await assert.rejects(
     client.saveMacro({ id: 1, name: "valid", data: [256] }),
-    /Macro byte/,
+    /宏字节/,
   );
   assert.equal(fake.writes.length, 0);
 });
@@ -1251,13 +1251,13 @@ test("notification parser respects separate report ID and native one-based DPI s
 test("malformed imported button records are rejected before reaching the UI", () => {
   const profile = defaultProfile();
   delete profile.buttons[5];
-  assert.throws(() => validateProfile(profile), /every physical/);
+  assert.throws(() => validateProfile(profile), /所有物理按键/);
   const unknown = defaultProfile();
   unknown.buttons[5] = { type: 200, a1: 1, a2: 0 };
-  assert.throws(() => validateProfile(unknown), /Unsupported/);
+  assert.throws(() => validateProfile(unknown), /不支持/);
   const missingRepeat = defaultProfile();
   missingRepeat.buttons[5] = { type: 4, a1: 1, a2: 0 };
-  assert.throws(() => validateProfile(missingRepeat), /repeat/);
+  assert.throws(() => validateProfile(missingRepeat), /宏重复次数/);
 });
 test("macro references are verified before any profile mutation", async () => {
   const fake = fakeDevice((request) => response(request)),
@@ -1299,7 +1299,7 @@ test("invalid power threshold is rejected before profile or global writes", asyn
       },
       original,
     ),
-    /Low power/,
+    /低电量阈值/,
   );
   assert.equal(fake.writes.length, 0);
 });

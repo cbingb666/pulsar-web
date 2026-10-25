@@ -1,58 +1,62 @@
-# 1K / 8K receiver pairing: recovered official behavior
+<!-- canonical-language: zh-CN -->
 
-Investigation dates: 2026-10-18 (8K) and 2026-10-25 (1K extension and user acceptance). This record covers the original Pulsar 1K (`3710:5402`) and 8K (`3710:5403`) receivers. The initial 8K static investigation had no hardware and executed no USB commands. An 8K receiver subsequently became available for passive descriptor/feature reads and a production TypeScript routing check through a native adapter; those results are recorded below. The 1K extension was implemented from the official Xlite v4 pairing tool's recovered source and an existing native-adapter capture. After testing the new flow in the local development page, the user confirmed on 2026-10-25 (Asia/Shanghai) that real-device verification passed. No new raw 1K pairing capture was retained for this acceptance. The agent did not send hardware pairing commands. Vendor executables were downloaded, unpacked and decompiled, never run.
+# 1K / 8K 接收器配对：恢复的官方行为
 
-Current 8K acceptance with Xlite v4 Mini: the user confirmed pairing and subsequently confirmed DPI operation after the read-recovery fixes; browser connection and configuration reads passed. Configuration readback includes 8000 Hz, which is not a measurement of the actual USB report frequency. Receiver indicator mode 2 completed a full browser save; mode 1 was written and freshly read back, but the final complete settings snapshot timed out at `07/82`, so that save did not pass end to end. The last verified indicator mode is 1; hardware testing stopped before restoring mode 2. The user's later report that macOS desktop movement felt slower at 2000 DPI / 8000 Hz than at 1600 DPI / 1000 Hz remains unresolved. A fixed-DPI polling-rate comparison has not been completed. The user also confirmed the normal 1K browser pairing flow on 2026-10-25. This is user-reported hardware acceptance, separate from the earlier 1K configuration acceptance; it does not provide raw 1K pairing status events or separately verify each passive-routing branch. Raw pairing status frames and abnormal pairing/recovery paths still require separate evidence. See [verification.md](verification.md) for the dated hardware records and these boundaries.
+[中文（规范源）](receiver-pairing-evidence.md) · [English](en/receiver-pairing-evidence.md)
 
-## Official sources and reproducibility
+调查日期：2026-10-18（8K）、2026-10-25（1K 扩展与用户验收）。覆盖原版 Pulsar 1K（`3710:5402`）和 8K（`3710:5403`）。最初 8K 静态调查没有硬件、未执行 USB 命令；后来有实机被动描述符/Feature 读取及经原生适配器的生产 TypeScript 路由检查，记录如下。1K 根据官方 Xlite v4 工具反编译及既有原生抓包实现。用户在本地开发页测试后，于 2026-10-25（Asia/Shanghai）确认实机通过；未保留新的 1K 原始配对抓包。agent 没有发送实机配对命令。厂商 EXE 仅下载、解包、反编译，从未运行。
 
-The [official download page](https://www.pulsar.gg/pages/download) lists 8K Pairing Tool V0.11 (2024-10-24) and V0.12_all (2024-12-03). Its 8K section's download button currently resolves to the V0.11 archive. The same page's 4K eS pairing section links V0.12-all; that binary explicitly includes `5403:3710` in its supported IDs and defaults to this receiver. V0.12 is therefore additional direct evidence for the 8K path, despite the location of its download link.
+当前 Xlite v4 Mini 的 8K 验收：用户确认配对，并在读取恢复修复后确认 DPI 可用；浏览器连接/读取通过。回读有 8000 Hz，不是实际 USB 频率测量。灯光模式 2 完成浏览器保存；模式 1 已写入并新回读，但最终全快照在 `07/82` 超时，该保存未端到端通过。最后验证模式为 1，恢复模式 2 前已停止硬件测试。用户后报 macOS 2000 DPI / 8000 Hz 比 1600 DPI / 1000 Hz 更慢，原因未解，未做固定 DPI 回报率对照。用户也于 2026-10-25 确认 1K 正常浏览器配对。这是用户报告的实机验收，与早期 1K 配置验收分开；没有原始 1K 状态事件，未逐个验证被动分支。原始状态帧和异常/恢复仍需单独证据。日期和边界见 [验收记录](verification.md)。
 
-| Artifact | Official download | SHA-256 |
+## 官方来源与复现
+
+[官方下载页](https://www.pulsar.gg/pages/download) 列出 8K Pairing Tool V0.11（2024-10-24）和 V0.12_all（2024-12-03）。8K 下载按钮当时指向 V0.11；同页 4K eS 节链接 V0.12-all，该程序明确支持 `5403:3710` 并默认此接收器，因此 V0.12 虽在另一节，仍是 8K 直接证据。
+
+| 文件 | 官方下载 | SHA-256 |
 | --- | --- | --- |
 | V0.11 ZIP | [Pulsar_8K_Pair_v0.11.zip](https://www.pulsar.gg/cdn/shop/files/Pulsar_8K_Pair_v0.11.zip?v=18144765952964520615) | `14acfa48a79e555a51a544fef13b10988803b51fe53192c1e4796f0c5cd40e2d` |
-| V0.11 `Pulsar_Pair.exe` | Inside the archive | `2c9d7cb2d55deb9825b652798f51a2c3da3559ef3a69bfc565982374b5811481` |
+| V0.11 `Pulsar_Pair.exe` | 压缩包内 | `2c9d7cb2d55deb9825b652798f51a2c3da3559ef3a69bfc565982374b5811481` |
 | V0.12 ZIP | [Pulsar_Pairing-V0.12-all.zip](https://www.pulsar.gg/cdn/shop/files/Pulsar_Pairing-V0.12-all.zip?v=6288539492894907449) | `ce3401d610814cd65ca92c6025ac61ead6c25299a7ae6593676123b6bc7a7bda` |
-| V0.12 `Pulsar_Pair-V0.12.exe` | Inside the archive | `c412092680a43abb7132bd1c357922446068eb138064a478ab5202aafc74c959` |
-| Xlite v4 / XS1 ZIP, retrieved 2026-10-25 | [pulsar_XS1_pair.zip](https://www.pulsar.gg/cdn/shop/files/pulsar_XS1_pair.zip?v=7763943151566861443) | `606debdb2a04c5e96b5803fde1528a1b7f17d18422573ab4beef3f470679eca0` |
-| Xlite v4 / XS1 `Pulsar_Pair.exe` | Inside the archive | `5e9a0e2692f58e74ec175a8d64ad27aaf6fd8b31fa402882fc50e9f93719ec3c` |
+| V0.12 `Pulsar_Pair-V0.12.exe` | 压缩包内 | `c412092680a43abb7132bd1c357922446068eb138064a478ab5202aafc74c959` |
+| Xlite v4 / XS1 ZIP，2026-10-25 获取 | [pulsar_XS1_pair.zip](https://www.pulsar.gg/cdn/shop/files/pulsar_XS1_pair.zip?v=7763943151566861443) | `606debdb2a04c5e96b5803fde1528a1b7f17d18422573ab4beef3f470679eca0` |
+| Xlite v4 / XS1 `Pulsar_Pair.exe` | 压缩包内 | `5e9a0e2692f58e74ec175a8d64ad27aaf6fd8b31fa402882fc50e9f93719ec3c` |
 
-On 2026-10-25 the official download page's **Pairing tool for X2 v3, X2H v3, X2A v3, Xlite v4** section linked the XS1 archive above. This provides a tool explicitly listed for the target mouse, in addition to the earlier 8K tool evidence.
+2026-10-25 官网的 **Pairing tool for X2 v3, X2H v3, X2A v3, Xlite v4** 节链接上述 XS1 包，补充了明确列出目标鼠标的工具证据。
 
-Local, ignored evidence is under `.local/pairing/v011/`, `.local/pairing/v012/`, and `.local/pairing/xs1/`. All three are .NET applications. ILSpy 9.1 recovered the source using the existing local runtime, for example:
+忽略提交的证据在 `.local/pairing/v011/`、`.local/pairing/v012/`、`.local/pairing/xs1/`。三者均为 .NET，使用已有本地运行时和 ILSpy 9.1 恢复，例如：
 
 ```sh
 .local/dotnet-runtime/dotnet .local/ilspy/tools/net8.0/any/ilspycmd.dll \
   -p -o .local/pairing/v012/decompiled .local/pairing/v012/Pulsar_Pair-V0.12.exe
 ```
 
-The recovered `Match/UsbTool.cs` and `Match/HID.cs` are byte-for-byte identical across all three decompilations. Their SHA-256 values are respectively `a2ba0e55059abb819e97cdf947b3c9a8700153017d885fbbdd9fd5845efcfac3` and `14c9f6be90895c6561ca02ebe8f2a2b6bdc5f404d42aadfd0f886a4b7082af74`. References below use `.local/pairing/v012/decompiled/` as their root unless stated otherwise. `Match/Program.cs:13` launches `Pulsar2`; this matters because the helper class also contains unused commands for other products.
+三份反编译的 `Match/UsbTool.cs` 和 `Match/HID.cs` 逐字节相同，SHA-256 分别为 `a2ba0e55059abb819e97cdf947b3c9a8700153017d885fbbdd9fd5845efcfac3`、`14c9f6be90895c6561ca02ebe8f2a2b6bdc5f404d42aadfd0f886a4b7082af74`。除说明外以下引用根目录为 `.local/pairing/v012/decompiled/`。`Match/Program.cs:13` 启动 `Pulsar2`；辅助类也包含其他产品的未用命令，须注意调用路径。
 
-## 1K extension: official call path and passive evidence
+## 1K 扩展：官方调用路径与被动证据
 
-The XS1 decompilation under `.local/pairing/xs1/decompiled/` independently establishes that `3710:5402` uses the same active pairing protocol as the original 8K receiver. The following references use that root:
+`.local/pairing/xs1/decompiled/` 独立证明 `3710:5402` 与原版 8K 共用活动配对协议。以下引用以该目录为根：
 
-1. `Match/Program.cs:13` launches `Pulsar2`. Its `CheckPidVidInfo` at `Match/Pulsar2.cs:1004–1013` recognizes `5402:3710` and stores it as the receiver used by the active flow.
-2. `Pulsar2.cs:1029–1088` calls `WriteAllUsbSoft` once, which starts pairing and treats initial status `02` as already paired. `Pulsar2.cs:1091–1099` passes the selected PID/VID to `WriteDgGotoPairModelByPidVid`.
-3. The identical `UsbTool.cs:578–621` sends the same `48 4D 52 44 FC 24` output once, then reads native byte 7. The identical `HID.cs:400` and `457` choose `mi_02` for synchronous and overlapped input/output access.
-4. `Pulsar2.cs:1102–1143` waits at most 30 seconds; native byte 7 values `03` and `04` mean success and failure. The output packet and report-ID-free status offset therefore remain unchanged for 1K.
+1. `Match/Program.cs:13` 启动 `Pulsar2`。`Match/Pulsar2.cs:1004–1013` 的 `CheckPidVidInfo` 识别 `5402:3710` 并存为当前接收器。
+2. `Pulsar2.cs:1029–1088` 单次调用 `WriteAllUsbSoft` 启动配对，初态 `02` 视为已配对；`Pulsar2.cs:1091–1099` 将 PID/VID 传给 `WriteDgGotoPairModelByPidVid`。
+3. 相同的 `UsbTool.cs:578–621` 单次发 `48 4D 52 44 FC 24`，再读原生字节 7；`HID.cs:400`、`457` 为同步/重叠输入输出选择 `mi_02`。
+4. `Pulsar2.cs:1102–1143` 最多等 30 秒，原生字节 7 的 `03`/`04` 为成功/失败。因此 1K 的输出包及去 ID 后状态偏移不变。
 
-The existing `.local/receiver-routing-20261015T202350Z.json` has SHA-256 `7c13642c4c5248e5a211d5b25cc8a8de946ef934f5b4ed11b98305355439ffaf`. Its passive section records **one** GET per interface, before the later settings queries:
+既有 `.local/receiver-routing-20261015T202350Z.json` SHA-256 为 `7c13642c4c5248e5a211d5b25cc8a8de946ef934f5b4ed11b98305355439ffaf`。其被动部分在设置查询前，每个接口只有**一次** GET：
 
-| Interface | Captured passive result | Independent role evidence |
+| 接口 | 捕获结果 | 独立角色证据 |
 | --- | --- | --- |
-| MI02 | Successful native size 2, including report ID; payload exactly one `00` byte (`:15–21`) | Official pairing tool selects `mi_02` |
-| MI03 | Successful native size 65, including report ID; payload exactly 64 zero bytes (`:5–11`) | Subsequent polling queries return valid full settings replies (`:27–39`, `:48–60`); Fusion selects MI03 |
+| MI02 | 原生大小 2（含 ID），载荷恰为一个 `00`（`:15–21`） | 官方工具选择 `mi_02` |
+| MI03 | 原生大小 65（含 ID），载荷为 64 个零（`:5–11`） | 后续 polling 返回完整有效响应（`:27–39`、`:48–60`）；Fusion 选择 MI03 |
 
-Both descriptors are the shared 64-byte input/output/feature layout below. For 1K only, the browser distinguishes a pairing candidate by an exact one-byte `00` payload and its sibling by either a valid settings report or an exact 64-byte all-zero payload; a 65-byte all-zero settings buffer is also accepted after removing its leading report-ID byte. It requires two matching role observations on each interface, exactly two complete candidates of the same supported PID, and no incomplete probe. Repeating the GETs twice is a conservative implementation safeguard; the original 1K capture does not establish repeated passive-read stability. An all-zero settings payload identifies only the route when paired with the complementary short response; it does not prove a settings transaction, paired mouse identity, or configuration readiness. Other short lengths, nonzero short reads, unknown status packets, and failed reads do not establish the 1K pairing route. Mixed 1K/8K candidates are rejected before probing or sending output. The 8K rule remains separate and does not accept zero-filled settings buffers or the 1K short response.
+两描述符均为下述共享的 64 字节输入/输出/Feature。仅 1K，浏览器以精确单字节 `00` 识别配对候选，另一侧必须为有效设置包或精确 64 字节全零；65 字节全零可去前导 ID 后接受。要求各侧两次一致、恰好两个同支持 PID 完整候选、无不完整探测。重复两次是保守实现保护，原 1K 抓包不证明重复稳定性。全零仅在互补短响应下识别路由，不证明设置事务、鼠标身份或配置就绪。其他短长度、非零短读、未知状态、读取失败均不能识别 1K。混合 1K/8K 在探测/输出前拒绝。8K 规则独立，不接受全零或 1K 短响应。
 
-## Pairing interface and packet
+## 配对接口和报文
 
-Pairing uses a distinct vendor input/output HID interface, not the Fusion settings feature-report protocol. `Match/HID.cs:364–418` and `421–475` select the requested VID/PID, a Windows path containing `mi_02`, and input/output report lengths each at least 65 bytes. The code stores the descriptor usage page but never checks its value. It does not establish a specific usage page or usage suitable for a WebHID filter. Windows interface number is not a browser candidate index.
+配对用独立厂商 Input/Output HID 接口，不用 Fusion Feature 设置协议。`Match/HID.cs:364–418`、`421–475` 按 VID/PID、含 `mi_02` 的 Windows 路径、至少 65 字节输入/输出长度选择。代码存 usage page 但不检查，不能据此确立 WebHID usage 过滤条件。Windows 接口号不是浏览器候选索引。
 
-The earlier **1K** capture `.local/receiver-routing-20261015T202350Z.json` showed identical descriptors on interfaces 2 and 3. The later actual **8K** capture `.local/8k-passive-20261018T045508Z.json` confirms the same layout: `06ffff0901a1011581257f7508954009028102090391020904b182c0`, usage page `FFFF`, usage 1, and unnumbered 64-byte input, output and feature reports on both MI02 and MI03. This explains why a single receiver triggered the initial browser ambiguity rejection. Descriptor shape alone cannot identify the pairing interface; candidate ordering and sending pairing writes to every candidate are not valid substitutes.
+早期 **1K** `.local/receiver-routing-20261015T202350Z.json` 显示 2/3 相同描述符。后来的 **8K** `.local/8k-passive-20261018T045508Z.json` 确认相同布局：`06ffff0901a1011581257f7508954009028102090391020904b182c0`，usage page `FFFF`、usage 1，MI02/MI03 都是无编号 64 字节输入/输出/Feature。这解释最初单接收器也被判歧义；仅描述符不能识别，不能以顺序或向每个候选发配对替代。
 
-`Match/UsbTool.cs:599–621` allocates a zeroed 65-byte Windows HID report and sets native bytes 1–6 to decimal `72,77,82,68,252,36`. Native byte 0 is the report ID, zero. The complete WebHID output is therefore `sendReport(0, payload)` with exactly 64 payload bytes:
+`Match/UsbTool.cs:599–621` 创建全零 65 字节 Windows 报告，原生 1–6 设十进制 `72,77,82,68,252,36`，字节 0 为零 ID。完整 WebHID 为 `sendReport(0, payload)`，载荷恰 64 字节：
 
 ```text
 48 4D 52 44 FC 24 00 00 00 00 00 00 00 00 00 00
@@ -61,73 +65,73 @@ The earlier **1K** capture `.local/receiver-routing-20261015T202350Z.json` showe
 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 ```
 
-This is a source-derived request fixture, not a captured hardware packet. The first four bytes spell `HMRD`. There is no checksum, profile, Fusion command status byte or feature-report envelope in this output packet. `Match/ContorlUsbHander.cs:139–173` and `Match/HID.cs:516–545` trace the active call through Windows `WriteFile` / `ReadFile`, not `HidD_SetFeature` / `HidD_GetFeature`.
+这是源码推导样本，不是硬件抓包。前四字节为 `HMRD`，没有校验和、配置、Fusion 状态或 Feature 封装。`Match/ContorlUsbHander.cs:139–173`、`Match/HID.cs:516–545` 将调用追至 Windows `WriteFile`/`ReadFile`，不是 `HidD_SetFeature`/`HidD_GetFeature`。
 
-## Active pairing sequence
+## 活动配对顺序
 
-1. `Match/Pulsar2.cs:499–570` starts only after the user presses Pair, selects the receiver VID/PID, and invokes `WriteDgGotoPairModelByPidVid` once. V0.12's supported ID table is `Match/PidInfoList.cs:5`; the default is `3710:5403` at `Pulsar2.cs:21–23`.
-2. `Match/UsbTool.cs:578–621` opens the synchronous pairing interface, writes the packet above, waits 50 ms, then reads one 65-byte input report. It takes native byte 7 as the result and closes the interface. In WebHID's report-ID-free payload this is byte 6.
-3. If that first result is `02`, `Match/Pulsar2.cs:519–528` displays “Already paired”; `551–554` skips the subsequent wait. This is not fresh confirmation of the attached mouse model or of settings communication.
-4. Otherwise `Pulsar2.cs:573–614` waits up to 30 seconds for input reports. Each native iteration opens an overlapped handle, waits 30 ms and reads. Status `03` at native byte 7 means pairing success, and `04` means pairing failure. All other values continue waiting. `UsbTool.cs:683–690` is the read helper. The active flow sends no polling/status command and never resends the start packet while waiting.
-5. No stop/cancel output command exists in this active flow. On device removal, the UI sets a local end flag (`Pulsar2.cs` `WndProc`), which the waiting loop checks. A browser cancellation can stop listening and close its handle; it cannot truthfully claim to have cancelled the receiver's radio pairing mode.
+1. `Match/Pulsar2.cs:499–570` 仅在用户按 Pair 后启动，选 VID/PID 并单次调用 `WriteDgGotoPairModelByPidVid`。V0.12 支持表在 `Match/PidInfoList.cs:5`，默认 `3710:5403` 在 `Pulsar2.cs:21–23`。
+2. `Match/UsbTool.cs:578–621` 打开同步接口、发上述包、等 50 ms、读一个 65 字节 Input，取原生字节 7 后关闭；WebHID 去 ID 后为字节 6。
+3. 首次结果 `02` 时，`Match/Pulsar2.cs:519–528` 显示 Already paired，`:551–554` 跳过后续等待。这不新确认型号或设置通信。
+4. 否则 `Pulsar2.cs:573–614` 最多等 30 秒，每轮打开 overlapped 句柄、等 30 ms 再读。原生字节 7 `03` 成功、`04` 失败，其他继续。`UsbTool.cs:683–690` 为读辅助函数。活动流程不发轮询/状态命令，不重发开始包。
+5. 活动流程没有停止/取消输出命令。拔出时界面设置本地结束标志（`Pulsar2.cs` 的 `WndProc`），等待循环检查。浏览器取消只能停止监听和关闭句柄，不能声称撤回无线模式。
 
-`UsbTool.cs:693–723` contains an alternative helper that sends the same packet and polls with 120 ms waits, but `Pulsar2` does not invoke it. Do not combine that unused helper with the active flow and accidentally send start twice.
+`UsbTool.cs:693–723` 有发同包并每 120 ms 轮询的替代函数，但 `Pulsar2` 未调用。不能混合两个路径导致启动两次。
 
-## What the source does not prove
+## 源码不能证明什么
 
-- The native parser checks only native byte 7. It validates neither the input report ID, report header, checksum nor actual returned byte count. In particular, it does **not** prove that responses echo `48 4D 52 44 FC 24`.
-- The output report ID is demonstrably zero. The later hardware capture establishes unnumbered 64-byte input descriptors, but no raw browser pairing input capture has yet confirmed the actual status framing. The native parser consumes a report-ID-prefixed buffer without inspecting byte 0.
-- Native reads allocate 65 bytes, and interface selection requires at least that capacity. The user confirmed 1K and 8K browser pairing success, but no retained raw pairing input trace independently verifies the payload length and framing for either receiver. Rejecting malformed/truncated replies is a browser safety decision; stricter header/report-ID rules must be documented as implementation assumptions pending capture.
-- The first native reply recognizes only `02`; the subsequent loop recognizes only `03`/`04`. There is no explicit acknowledgement value for “started,” and no basis to assign a specific meaning to values `00`, `01` or other values.
-- Source-derived pairing completion must be followed by ordinary feature-interface identity validation (`3710:3401` for this app's Xlite v4), settings reads and useful readback before claiming that configuration is ready. `03` alone does not identify which compatible mouse paired.
-- The normal 1K and 8K browser pairing flows have user confirmation on this unit. Hardware timing, raw status framing, permission/error variants, timeout recovery and replacement of an existing pairing have not been systematically verified. Automated fixtures can verify the implemented state machine but cannot establish these firmware facts.
+- 原版仅检查字节 7，不校验输入 ID、头、checksum 或实际长度；尤其**不能**证明响应回显 `48 4D 52 44 FC 24`。
+- 输出 ID 明确为零；后续描述符证明无编号 64 字节输入，但未保留浏览器原始状态帧。原版消费带 ID 缓冲却不检查字节 0。
+- 原生分配 65 字节且要求至少该容量。用户确认两种配对成功，但无原始 trace 独立验证长度/封装。拒绝损坏/截断属于浏览器保护，严格头/ID 规则须作为待抓包的实现假设记录。
+- 原生首次只认 `02`，后续只认 `03`/`04`。没有明确的“已开始”ACK，不能给 `00`、`01` 等任意赋义。
+- 配对完成后必须进行 Feature 身份校验（本应用 `3710:3401`）、配置读取及有效回读才能宣称就绪；仅 `03` 不识别具体鼠标。
+- 本机正常 1K/8K 浏览器流程有用户确认，但硬件时序、原始状态封装、授权/错误变体、超时恢复和替换既有配对未系统验证。模拟样本只验证状态机，不确立固件事实。
 
-## User preparation
+## 用户准备
 
-The official download page requires only the target 8K receiver to be connected, with other receivers removed. `Match/Pulsar2.cs:965–1025` instructs the user to connect the receiver, disconnect the mouse from the computer, hold left click, right click and the scroll-wheel button together for three seconds, check for a blinking mouse LED, and then press Pair. Its button can be activated using Space or Enter (`1005` and the keyboard handlers), which is useful while the mouse is in pairing mode.
+官方下载页要求只接目标 8K，拔其他接收器。`Match/Pulsar2.cs:965–1025` 提示连接接收器、断开鼠标数据线，同时按住左/右/滚轮三秒，确认 LED 闪烁再 Pair。按钮支持 Space/Enter（`1005` 和键盘处理），方便配对中操作。
 
-The XS1 tool gives the same preparation sequence but says to hold those three buttons for **five seconds** (`.local/pairing/xs1/decompiled/Match/Pulsar2.cs:324–374`); its one-dongle-only instruction is at `:440`. The observable endpoint is the blinking mouse LED. Browser guidance should allow this 3–5 second range rather than assume the two tools print the same duration.
+XS1 工具同样步骤但要求**五秒**（`.local/pairing/xs1/decompiled/Match/Pulsar2.cs:324–374`），只插一个接收器在 `:440`。终点是 LED 闪烁，浏览器指导应允许 3–5 秒，不假定两工具文字相同。
 
-The [official receiver product page](https://www.pulsar.gg/products/8k-dongle) lists Xlite v4 compatibility. That is evidence for this receiver generation, not for later LED 8K Gen.2/CrazyLight products. The implementation supports only original receivers `3710:5402` and `3710:5403`; other IDs remain outside its scope.
+[官方接收器产品页](https://www.pulsar.gg/products/8k-dongle) 列出 Xlite v4 兼容，这是此代证据，不适用于后续 LED 8K Gen.2/CrazyLight。仅支持原版 `3710:5402`、`3710:5403`，其他 ID 不在范围。
 
-## Configuration after pairing
+## 配对后的配置
 
-The existing native Fusion evidence remains separate: `.local/extracted/fusion/Config/my_models.csv:7` associates Xlite V4 with `5402;5403`, labels `1K;8K`, and settings interface `MI03`. `.local/decompiled/huAZ2tYGRX2LLl1Kis/QeugLfjKJdKnv2KrF5.cs:1228–1239` uses 65-byte native feature packets, defaults to a 30 ms initial response wait, and maps polling raw values 16/32/64 to 2000/4000/8000 Hz. `DriverCore.ViewModel/HomePageViewModel.cs:190–227` selects the 8K polling range using the receiver label/PID.
+Fusion 原生证据独立：`.local/extracted/fusion/Config/my_models.csv:7` 将 Xlite V4 关联 `5402;5403`、`1K;8K`、设置 `MI03`。`.local/decompiled/huAZ2tYGRX2LLl1Kis/QeugLfjKJdKnv2KrF5.cs:1228–1239` 使用原生 65 字节 Feature，默认初等 30 ms，回报率原值 16/32/64 对应 2000/4000/8000。`DriverCore.ViewModel/HomePageViewModel.cs:190–227` 按接收器标签/PID 选 8K 范围。
 
-The settings identity read is category `01`, read register `84`, sub `04`; native `GetDevicePID` is at `QeugLfjKJdKnv2KrF5.cs:1472`. Firmware version read uses `01/87/04` with an explicit 100 ms wait (`1340–1371`). `GetWirelessConnectStatus` at `1409` sends `09/81/10` but returns `true` unconditionally, so its return value is not reliable evidence of pairing or connectivity. See [protocol.md](protocol.md) for the established settings protocol and receiver compatibility paths, and [verification.md](verification.md) for hardware acceptance boundaries.
+身份读取为 `01/84/04`，原生 `GetDevicePID` 在 `QeugLfjKJdKnv2KrF5.cs:1472`；固件 `01/87/04` 明确等 100 ms（1340–1371）。`GetWirelessConnectStatus`（1409）发 `09/81/10` 却无条件返回 `true`，不能当配对/连接证据。设置及兼容路径见 [配置协议](protocol.md)，验收见 [验收记录](verification.md)。
 
-The user subsequently reported that the browser displayed receiver pairing completion, followed by a timeout on the normal `01/84` identity query. Read-only capture `.local/8k-read-sequence-20261018T050158Z.json` showed valid identity bytes `10 37 01 34`, but category/register retained from the preceding response: `01/89` after polling, `02/86` after active-profile reading, and `08/81` after battery reading. Strict address matching discarded these replies. The connection handshake now accepts only the observed successful `01/89/04` identity variant after a fresh polling query, still validating checksum and Xlite v4 identity; general transactions remain strict. The indicator query has a similarly narrow compatibility path described in [protocol.md](protocol.md#receiver-and-reset-controls).
+用户后来报告浏览器配对完成、普通 `01/84` 超时。只读 `.local/8k-read-sequence-20261018T050158Z.json` 身份字节有效 `10 37 01 34`，类别/寄存器却保留前响应：polling 后 `01/89`、活动配置后 `02/86`、电量后 `08/81`，被严格匹配丢弃。现在仅在新 polling 后接受实测成功 `01/89/04`，仍校验 checksum/身份，一般事务严格。灯光也有窄兼容，见 [接收器和恢复控制](protocol.md#接收器和恢复控制)。
 
-After these fixes, the production client completed a warning-free native-adapted read on the attached 8K receiver: `.local/hardware-client-2026-10-18T05-04-48-869Z.json`. It confirmed `3710:3401`, firmware `00.00.10.16`, profile 1, 1000 Hz, battery 70%, not charging, sleep 30 seconds, low-power threshold 10%, indicator mode 2, and an empty macro list. All 34 transmitted configuration packets were read requests. This historical checkpoint validated the repaired read path on hardware. Subsequent browser connection, DPI usage and indicator-write acceptance are recorded below and in [verification.md](verification.md); this read-only capture itself does not establish those results.
+修复后 `.local/hardware-client-2026-10-18T05-04-48-869Z.json` 原生适配完整读取无警告，身份 `3710:3401`、固件 `00.00.10.16`、配置 1、1000 Hz、电量 70%、未充电、休眠 30 秒、阈值 10%、灯光 2、空宏列表。34 个发送包全是读。此历史检查点验证修复读路径，不单独证明后续浏览器、DPI 或灯光写入结果，见下文及验收记录。
 
-## Real-device passive routing check
+## 实机被动路由检查
 
-On 2026-10-18, `.local/8k-passive-20261018T045508Z.json` recorded two `GET_FEATURE(0)` calls per interface, with no output or `SET_FEATURE` commands:
+2026-10-18 `.local/8k-passive-20261018T045508Z.json` 每接口两次 `GET_FEATURE(0)`，没有 Output 或 SET_FEATURE：
 
-| Interface | Both passive reads |
+| 接口 | 两次被动读取 |
 | --- | --- |
-| MI02, selected by the official pairing tool | Native read failure `IOHIDDeviceGetReport failed: (0xE0005000)` |
-| MI03, selected by Fusion settings | 64-byte payload, status `05`, remaining body zero, checksum `0005` |
+| 官方配对选择的 MI02 | 原生失败 `IOHIDDeviceGetReport failed: (0xE0005000)` |
+| Fusion 设置选择的 MI03 | 64 字节、状态 `05`、正文其余零、校验和 `0005` |
 
-`.local/8k-route-check.ts` then imported production `resolvePairingInterface`, supplied the captured descriptors and performed fresh native reads on the attached receiver. Its adapter forbids both pairing output and feature writes. `.local/8k-route-check-result.json` records `ok: true` and `selectedInterface: 2`, with MI03 deliberately supplied first. This validates the resolver against real reads through the native adapter, not actual browser permission/error behavior. The adapter explicitly translates native GET failures to the Chromium transport error below.
+`.local/8k-route-check.ts` 导入生产 `resolvePairingInterface`，用捕获描述符并在实机新读；适配器禁止配对输出和 Feature 写。`.local/8k-route-check-result.json` 为 `ok: true`、`selectedInterface: 2`，刻意将 MI03 先提供。验证原生适配实读，不验证实际浏览器授权/错误；适配器明确转换原生 GET 错误为以下 Chromium 错误。
 
-[Chromium's `HIDDevice::FinishReceiveFeatureReport`](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/third_party/blink/renderer/modules/hid/hid_device.cc) maps a failed feature read to `NotAllowedError` with the message `Failed to receive the feature report.`; the inspected local copy is `.local/chromium-hid-device.cc`. The [WebHID specification](https://wicg.github.io/webhid/index.html#dom-hiddevice-receivefeaturereport) specifies `NetworkError` for read failures. The resolver accepts those names only with that exact transport message. Neither error name identifies a USB interface or proves the underlying cause; it is used only with the complementary, repeated valid settings responses from this observed two-interface layout.
+[Chromium `HIDDevice::FinishReceiveFeatureReport`](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/third_party/blink/renderer/modules/hid/hid_device.cc) 将失败读取映射为 `NotAllowedError`、消息 `Failed to receive the feature report.`，所查副本 `.local/chromium-hid-device.cc`。[WebHID 规范](https://wicg.github.io/webhid/index.html#dom-hiddevice-receivefeaturereport) 规定 `NetworkError`。resolver 只接受这些名称配合精确消息。名称不标识接口也不证明根因，仅与此双接口布局中互补、重复的有效设置响应结合使用。
 
-## Browser implementation and hardware acceptance
+## 浏览器实现与实机验收
 
-`src/receiver-pairing.ts` requests only VID/PIDs `3710:5402` and `3710:5403`, without assuming a usage-page filter in the permission picker. For the captured shared descriptor, it requires exactly two vendor candidates of the same supported PID, with 64-byte input/output/feature report 0. Mixed receiver types stop before probing. It opens and probes each sequentially, twice, then closes each. A valid settings response has 64 payload bytes (also allowing a leading zero report-ID byte), known status `01`/`02`/`04`/`05`, and a valid checksum. The two observed layouts use separate role rules:
+`src/receiver-pairing.ts` 仅请求 `3710:5402`、`3710:5403`，选择器不假定 usage 过滤。共享描述符要求恰好两个同支持 PID 厂商候选，均有 64 字节输入/输出/Feature report 0。混合类型在探测前停止；依次各打开、两次探测、关闭。有效设置响应为 64 字节（可有前导零 ID）、已知状态 `01`/`02`/`04`/`05`、有效 checksum。两种布局角色规则分开：
 
-- **1K:** exactly one interface returns the exact one-byte `00` payload on both GETs, while its sibling repeatedly returns valid settings reports or the captured 64-byte all-zero settings buffer. The zero buffer exception is limited to 1K route selection and never establishes mouse identity.
-- **8K:** exactly one interface repeatedly returns the known feature-read transport failure, while its sibling repeatedly returns valid settings reports. All-zero settings buffers remain insufficient, and the 1K short response is not accepted.
+- **1K：**恰有一侧两次精确返回单字节 `00`，另一侧重复有效设置包或已捕获的 64 字节全零。全零例外仅用于 1K 路由，不证明身份。
+- **8K：**恰有一侧重复已知 Feature 读取传输失败，另一侧重复有效设置包。全零仍不足，1K 短响应不接受。
 
-Missing siblings, unknown layouts, inconsistent reads, generic errors, open failures, timeouts and cancellation stop before pairing output. The earlier single-candidate path remains only for an input/output interface with no feature report 0; this layout has not been observed on the captured units. The user confirmed the normal 1K browser pairing flow on 2026-10-25; raw browser probe logs and separate acceptance of every routing/error branch remain unavailable.
+缺少兄弟接口、未知布局、不一致读取、一般错误、打开失败、超时、取消均在输出前停止。旧单候选路径仅适用于无 Feature report 0 的 Input/Output 接口，实测设备未观察此布局。用户于 2026-10-25 确认 1K 正常浏览器配对；无原始浏览器探测日志，也未逐个验收分支。
 
-WebHID delivers input events asynchronously, so the browser installs the listener before sending once and waits in one bounded 30-second window. It does not reproduce the native 50 ms blocking first-read delay or repeated handle reopening. First valid status `02` means already paired; later `02` values keep waiting. Terminal `03`/`04` are accepted even if they arrive immediately, so a fast completion cannot be lost. This event-driven handling is an adaptation of the native status meanings. A failed or hanging `sendReport` cannot be converted into success by an early input event.
+WebHID 输入异步，浏览器先注册监听，再单次发送，在统一 30 秒内等待；不复现原生阻塞初等 50 ms 或重复打开句柄。首个有效 `02` 为已配对，后来 `02` 继续等。终态 `03`/`04` 立即到达也接受，不丢快速完成。这是按原生状态语义作事件适配。失败/挂起的 `sendReport` 不能被提前输入变为成功。
 
-Only report ID 0 with exactly 64 input payload bytes is interpreted. Other input IDs and lengths from the selected vendor interface are still recorded in diagnostic logs for later descriptor/framing work. The UI bounds logs to 100 pairing entries and exports descriptors, passive probe results and the final result; it does not listen to ordinary keyboard/mouse collections. Cancellation, timeout, disconnect, failure and success remove listeners and close the pairing handle. No radio cancel or firmware command is sent.
+只解释 report ID 0、恰 64 字节输入。其他 ID/长度仍记诊断便于后续封装调查。界面最多 100 条配对日志，导出描述符、探测和最终结果，不监听日常键鼠 collection。取消、超时、拔出、失败、成功均移除监听并关句柄；不发无线取消或固件命令。
 
-After a reported completion, the app attempts configuration only through the other interfaces returned by that explicit selection, checks the Xlite v4 identity, and reads a fresh snapshot before advertising readiness. A failed configuration check returns to a disconnected state and offers a separate normal connection click for the selected 1K or 8K receiver; existing local drafts are retained. Success guidance reflects the selected receiver: 1K supports up to 1000 Hz, while 8K offers 2000 / 4000 / 8000 Hz. The user confirmed 8K pairing, and native-adapted and browser model verification/configuration reads pass on that unit. On 2026-10-25 the user also confirmed real-device verification of the new 1K flow in the local development page. That confirmation covers the normal flow; it does not establish all browser routing/error variants, raw pairing status framing, cancel/timeout behavior, other firmware versions, or a complete settings-write matrix.
+报告完成后，仅经该次明确选择返回的其他接口配置，校验 Xlite v4 身份并读新快照后才显示就绪。失败回到断开，提供单独普通连接按钮，保留本地草稿。提示随接收器变化：1K 最高 1000，8K 可选 2000/4000/8000。用户确认 8K，原生适配和浏览器身份/读取通过；2026-10-25 也确认本地新 1K 实机正常流程。不覆盖所有路由/错误变体、原始状态帧、取消/超时、其他固件或完整写矩阵。
 
-A subsequent full reload of the local browser page successfully auto-connected the real 8K receiver and displayed its configuration (1000 Hz, active DPI stage 4 at 2000 DPI, debounce 0 ms, LOD 1.0 mm). Before reload the page still exhibited the previous client behavior despite updated UI text. Screenshot: `.local/8k-connected-browser.png`. This historical checkpoint verifies browser connection and settings reads for the current receiver; it does not itself validate high-rate or indicator-setting writes.
+之后浏览器整页刷新自动连真实 8K，显示 1000 Hz、活动第 4 档 2000 DPI、消抖 0 ms、LOD 1.0 mm。刷新前虽文字更新仍是旧客户端行为。截图 `.local/8k-connected-browser.png`，该历史检查点仅验证连接/读取，不单独验证高速或灯光写入。
 
-Later configuration captures confirmed 8000 Hz, and the user confirmed that DPI operation worked after the pending/stale-read recovery changes. That confirmation does not prove that a particular recovery branch was exercised on hardware, nor does the polling register measure actual USB report frequency. Indicator captures subsequently verified both mode values through fresh readback: mode 2 completed a full browser save, while mode 1 completed the power write/readback and then failed the final full snapshot at LOD query `07/82`. The unresolved macOS desktop speed report is recorded separately from these configuration results. The latest [verification records](verification.md) retain the exact operations, final indicator state and remaining tests.
+后来配置捕获确认 8000 Hz；用户确认 pending/旧帧恢复修复后 DPI 可用，但不证明某特定恢复分支在硬件触发，回报率寄存器也非实际频率。灯光两模式均新回读：模式 2 完整保存，模式 1 完成电源写/回读后最终 LOD `07/82` 快照失败。macOS 速度反馈单独记录。[验收记录](verification.md) 保留精确操作、最后灯光状态及待测项。

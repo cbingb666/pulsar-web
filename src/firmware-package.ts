@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 // Exact payload in the official XS1 v1017/v125 T01 updater. No firmware is
 // bundled or executed. See docs/firmware.md for source and extraction evidence.
 export const FIRMWARE_RELEASE = Object.freeze({
@@ -28,7 +29,7 @@ const images = new WeakMap<FirmwareImage, Uint8Array<ArrayBuffer>>();
 
 async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   if (!globalThis.crypto?.subtle)
-    throw new Error("无法校验固件，请通过 HTTPS 或 localhost 打开本页");
+    throw new Error(t("无法校验固件，请通过 HTTPS 或 localhost 打开本页"));
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (v) =>
     v.toString(16).padStart(2, "0"),
@@ -44,7 +45,7 @@ export async function importFirmware(
     buffer.byteLength !== FIRMWARE_RELEASE.updaterSize
   )
     throw new Error(
-      "文件大小不匹配。请解压官方 XS1 v1017_v125_T01 升级包，选择其中的 .exe；也可选择已校验的原始鼠标 .bin 固件。",
+      t("文件大小不匹配。请解压官方 XS1 v1017_v125_T01 升级包，选择其中的 .exe；也可选择已校验的原始鼠标 .bin 固件。"),
     );
   const bytes = new Uint8Array(buffer.slice(0));
   const hash = await sha256(bytes);
@@ -64,11 +65,11 @@ export async function importFirmware(
     payload = bytes;
   } else {
     throw new Error(
-      "SHA-256 不匹配：只接受已核对的官方 XS1 1.0.1.7 升级器或鼠标固件。文件可能损坏或属于其他型号/版本，未发送任何刷写命令。",
+      t("SHA-256 不匹配：只接受已核对的官方 XS1 1.0.1.7 升级器或鼠标固件。文件可能损坏或属于其他型号/版本，未发送任何刷写命令。"),
     );
   }
   if ((await sha256(payload)) !== FIRMWARE_RELEASE.sha256)
-    throw new Error("内嵌鼠标固件校验失败，未发送任何刷写命令");
+    throw new Error(t("内嵌鼠标固件校验失败，未发送任何刷写命令"));
   const image = Object.freeze({
     name,
     version: FIRMWARE_RELEASE.version,
@@ -84,7 +85,7 @@ export function getFirmwareBytes(
   image: FirmwareImage,
 ): Uint8Array<ArrayBuffer> {
   const bytes = images.get(image);
-  if (!bytes) throw new Error("固件尚未通过官方文件校验，请重新选择文件");
+  if (!bytes) throw new Error(t("固件尚未通过官方文件校验，请重新选择文件"));
   return bytes.slice();
 }
 
@@ -94,7 +95,7 @@ export async function readFirmwareFile(file: File): Promise<FirmwareImage> {
     file.size !== FIRMWARE_RELEASE.updaterSize
   )
     throw new Error(
-      "请选择解压后的官方 Pulsar_Updater_v1017_v125_T01.exe，或已校验的鼠标 .bin 固件。当前文件大小不匹配。",
+      t("请选择解压后的官方 Pulsar_Updater_v1017_v125_T01.exe，或已校验的鼠标 .bin 固件。当前文件大小不匹配。"),
     );
   return importFirmware(await file.arrayBuffer(), file.name);
 }

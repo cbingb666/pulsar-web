@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import {
   createMacro,
   validateMacroEvent,
@@ -82,15 +83,15 @@ const mouseNames = [
   "ForwardButton",
 ];
 
-export function importFusionCsv(text: string, name = "导入的宏"): Macro {
-  if (text.length > 2_000_000) throw new Error("CSV 文件超过 2 MB");
+export function importFusionCsv(text: string, name = t("导入的宏")): Macro {
+  if (text.length > 2_000_000) throw new Error(t("CSV 文件超过 2 MB"));
   const lines = text
     .replace(/^\uFEFF/, "")
     .split(/\r?\n/)
     .filter((line) => line.trim());
   if (!lines[0]?.startsWith("ImageIndex,"))
-    throw new Error("不是 Pulsar Fusion 宏 CSV 文件");
-  if (lines.length > 1001) throw new Error("原版宏最多支持 1000 个事件");
+    throw new Error(t("不是 Pulsar Fusion 宏 CSV 文件"));
+  if (lines.length > 1001) throw new Error(t("原版宏最多支持 1000 个事件"));
   const events: MacroEvent[] = [];
   lines.slice(1).forEach((line, index) => {
     const comma = line.indexOf(",");
@@ -98,10 +99,10 @@ export function importFusionCsv(text: string, name = "导入的宏"): Macro {
     const rest = line.slice(comma + 1);
     const label = rest.split(",")[0].trim();
     let event: MacroEvent;
-    if (comma < 0) throw new Error(`第 ${index + 2} 行格式无效`);
+    if (comma < 0) throw new Error(t`第 ${index + 2} 行格式无效`);
     if (image === 0) {
       const match = label.match(/^(\d+(?:\.\d+)?)\s*s$/);
-      if (!match) throw new Error(`第 ${index + 2} 行延迟格式无效`);
+      if (!match) throw new Error(t`第 ${index + 2} 行延迟格式无效`);
       event = {
         type: "delay",
         durationMs: Math.round(Number(match[1]) * 1000),
@@ -111,7 +112,7 @@ export function importFusionCsv(text: string, name = "导入的宏"): Macro {
         ? "Comma"
         : browserCodes.get(label.toLowerCase());
       if (!code)
-        throw new Error(`第 ${index + 2} 行包含不支持的键名：${label}`);
+        throw new Error(t`第 ${index + 2} 行包含不支持的键名：${label}`);
       event = { type: "key", action: image === 1 ? "down" : "up", code };
     } else if (image === 3) {
       const mouse = label.match(
@@ -130,13 +131,13 @@ export function importFusionCsv(text: string, name = "导入的宏"): Macro {
           type: "wheel",
           direction: label.includes("WheelUp") ? "up" : "down",
         };
-      else throw new Error(`第 ${index + 2} 行包含尚未验证的鼠标移动事件`);
-    } else throw new Error(`第 ${index + 2} 行事件类型 ${image} 不受支持`);
+      else throw new Error(t`第 ${index + 2} 行包含尚未验证的鼠标移动事件`);
+    } else throw new Error(t`第 ${index + 2} 行事件类型 ${image} 不受支持`);
     events.push(validateMacroEvent(event));
   });
-  if (!events.length) throw new Error("CSV 中没有宏事件");
+  if (!events.length) throw new Error(t("CSV 中没有宏事件"));
   const macro = {
-    ...createMacro(name.replace(/\.csv$/i, "").slice(0, 64) || "导入的宏"),
+    ...createMacro(name.replace(/\.csv$/i, "").slice(0, 64) || t("导入的宏")),
     events,
   };
   encodeNativeMacro(macro);
@@ -150,10 +151,10 @@ export function exportFusionCsv(macro: Macro): string {
     if (event.type === "delay") rows.push(`0,${event.durationMs / 1000} s`);
     else if (event.type === "key") {
       const name = names[event.code];
-      if (!name) throw new Error(`原版 CSV 不支持键码 ${event.code}`);
+      if (!name) throw new Error(t`原版 CSV 不支持键码 ${event.code}`);
       if (name === ",")
         throw new Error(
-          "原版 CSV 不转义逗号键，无法可靠导入原程序；请使用 JSON 导出",
+          t("原版 CSV 不转义逗号键，无法可靠导入原程序；请使用 JSON 导出"),
         );
       rows.push(`${event.action === "down" ? 1 : 2},${name}`);
     } else if (event.type === "mouse")

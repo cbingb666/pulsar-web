@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { validateMacroEvent } from "./macros";
 import type { Macro, MacroEvent } from "./macros";
 
@@ -83,7 +84,7 @@ const mouseMasks = [1, 4, 2, 8, 16];
 
 export function encodeNativeMacro(macro: Pick<Macro, "events">): number[] {
   if (!Array.isArray(macro.events) || macro.events.length === 0)
-    throw new Error("空宏不能写入设备，请先添加事件。");
+    throw new Error(t("空宏不能写入设备，请先添加事件。"));
   const bytes: number[] = [];
   let eventCount = 0;
   for (const candidate of macro.events) {
@@ -108,7 +109,7 @@ export function encodeNativeMacro(macro: Pick<Macro, "events">): number[] {
         bytes.push(event.action === "down" ? 3 : 4, code);
       else
         throw new Error(
-          `键码 ${event.code} 尚未在原生软件中验证，不能写入设备。`,
+          t`键码 ${event.code} 尚未在原生软件中验证，不能写入设备。`,
         );
       eventCount++;
     } else if (event.type === "mouse") {
@@ -120,7 +121,7 @@ export function encodeNativeMacro(macro: Pick<Macro, "events">): number[] {
     }
     if (eventCount > NATIVE_MACRO_MAX_EVENTS)
       throw new Error(
-        `转换后超过原生软件的 ${NATIVE_MACRO_MAX_EVENTS} 个事件上限。`,
+        t`转换后超过原生软件的 ${NATIVE_MACRO_MAX_EVENTS} 个事件上限。`,
       );
   }
   return bytes;
@@ -135,12 +136,12 @@ export function decodeNativeMacro(
       (value) => !Number.isInteger(value) || value < 0 || value > 255,
     )
   ) {
-    throw new Error("设备宏字节流格式无效或超出原生容量。");
+    throw new Error(t("设备宏字节流格式无效或超出原生容量。"));
   }
   const events: MacroEvent[] = [];
   let offset = 0;
   function read(): number {
-    if (offset >= data.length) throw new Error("设备宏数据被截断。");
+    if (offset >= data.length) throw new Error(t("设备宏数据被截断。"));
     return data[offset++];
   }
   while (offset < data.length) {
@@ -153,14 +154,14 @@ export function decodeNativeMacro(
       const value = read();
       const code = keysByCode.get(value);
       if (!code)
-        throw new Error(`设备宏包含尚未验证的键码 0x${value.toString(16)}。`);
+        throw new Error(t`设备宏包含尚未验证的键码 0x${value.toString(16)}。`);
       events.push({ type: "key", action: opcode === 3 ? "down" : "up", code });
     } else if (opcode === 5 || opcode === 6) {
       const mask = read();
       const code = modifiersByMask.get(mask);
       if (!code)
         throw new Error(
-          `设备宏包含尚未验证的修饰键组合 0x${mask.toString(16)}。`,
+          t`设备宏包含尚未验证的修饰键组合 0x${mask.toString(16)}。`,
         );
       events.push({ type: "key", action: opcode === 5 ? "down" : "up", code });
     } else if (opcode === 1 || opcode === 2) {
@@ -168,7 +169,7 @@ export function decodeNativeMacro(
       const button = mouseMasks.indexOf(mask);
       if (button === -1)
         throw new Error(
-          `设备宏包含尚未验证的鼠标按键组合 0x${mask.toString(16)}。`,
+          t`设备宏包含尚未验证的鼠标按键组合 0x${mask.toString(16)}。`,
         );
       events.push({
         type: "mouse",
@@ -178,18 +179,18 @@ export function decodeNativeMacro(
     } else if (opcode === 11) {
       const value = read();
       if (value !== 1 && value !== 255)
-        throw new Error("设备宏包含尚未验证的滚轮步进值。");
+        throw new Error(t("设备宏包含尚未验证的滚轮步进值。"));
       events.push({ type: "wheel", direction: value === 1 ? "up" : "down" });
     } else if ([8, 19, 20, 33, 34, 35].includes(opcode)) {
       throw new Error(
-        `设备宏使用尚有编码歧义的指令 0x${opcode.toString(16)}，暂不导入，原始数据未修改。`,
+        t`设备宏使用尚有编码歧义的指令 0x${opcode.toString(16)}，暂不导入，原始数据未修改。`,
       );
     } else
       throw new Error(
-        `设备宏包含未知指令 0x${opcode.toString(16)}（偏移 ${offset - 1}）。`,
+        t`设备宏包含未知指令 0x${opcode.toString(16)}（偏移 ${offset - 1}）。`,
       );
     if (events.length > NATIVE_MACRO_MAX_EVENTS)
-      throw new Error("设备宏超出原生事件数量上限。");
+      throw new Error(t("设备宏超出原生事件数量上限。"));
   }
   return events;
 }
@@ -206,20 +207,20 @@ export function macroBinding(
   macro: Pick<Macro, "loopMode" | "repeatCount">,
 ): NativeMacroBinding {
   if (!Number.isInteger(id) || id < 1 || id > 65535)
-    throw new Error("设备宏 ID 必须在 1–65535 之间。");
+    throw new Error(t("设备宏 ID 必须在 1–65535 之间。"));
   const a1 = id & 255;
   const a2 = id >>> 8;
   if (macro.loopMode === "whilePressed") return { type: 5, a1, a2 };
   if (macro.loopMode === "toggle") return { type: 6, a1, a2 };
   if (macro.loopMode !== "once" && macro.loopMode !== "repeat")
-    throw new Error("宏循环方式无效。");
+    throw new Error(t("宏循环方式无效。"));
   const repeat = macro.loopMode === "once" ? 1 : macro.repeatCount;
   if (
     !Number.isInteger(repeat) ||
     repeat < 1 ||
     repeat > NATIVE_MACRO_MAX_REPEAT
   )
-    throw new Error("原生宏的重复次数必须在 1–255 之间。");
+    throw new Error(t("原生宏的重复次数必须在 1–255 之间。"));
   return { type: 4, a1, a2, a3: repeat };
 }
 
@@ -228,9 +229,9 @@ export function decodeMacroBinding(
 ): Pick<Macro, "loopMode" | "repeatCount"> & { deviceId: number } {
   for (const value of [binding.a1, binding.a2])
     if (!Number.isInteger(value) || value < 0 || value > 255)
-      throw new Error("宏绑定中的设备 ID 无效。");
+      throw new Error(t("宏绑定中的设备 ID 无效。"));
   const deviceId = binding.a1 + binding.a2 * 256;
-  if (deviceId === 0) throw new Error("宏绑定中的设备 ID 不能为零。");
+  if (deviceId === 0) throw new Error(t("宏绑定中的设备 ID 不能为零。"));
   if (binding.type === 5)
     return { deviceId, loopMode: "whilePressed", repeatCount: 1 };
   if (binding.type === 6)
@@ -241,7 +242,7 @@ export function decodeMacroBinding(
     binding.a3! < 1 ||
     binding.a3! > 255
   )
-    throw new Error("宏绑定中的循环配置无效。");
+    throw new Error(t("宏绑定中的循环配置无效。"));
   return {
     deviceId,
     loopMode: binding.a3 === 1 ? "once" : "repeat",

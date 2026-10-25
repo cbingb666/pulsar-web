@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import {
   getHidApi,
   type HidApi,
@@ -79,8 +80,8 @@ export function selectPairingInterface(devices: HidDevice[]): HidDevice {
   if (candidates.length !== 1)
     throw new Error(
       candidates.length > 1
-        ? "浏览器返回了多个无法区分的配对通道，尚未发送命令。一个接收器也可能提供相同接口；请只保留目标接收器，若仍失败，请导出诊断以完成接口适配。"
-        : "未找到兼容的配对通道（64 字节输入 / 输出报告 0）。请选择原版 1K Dongle 或 8K Dongle；可导出诊断以核对接口。",
+        ? t("浏览器返回了多个无法区分的配对通道，尚未发送命令。一个接收器也可能提供相同接口；请只保留目标接收器，若仍失败，请导出诊断以完成接口适配。")
+        : t("未找到兼容的配对通道（64 字节输入 / 输出报告 0）。请选择原版 1K Dongle 或 8K Dongle；可导出诊断以核对接口。"),
     );
   const device = candidates[0];
   if (
@@ -88,7 +89,7 @@ export function selectPairingInterface(devices: HidDevice[]): HidDevice {
     !device.addEventListener ||
     !device.removeEventListener
   )
-    throw new Error("当前 HID 接口不支持配对所需的输入 / 输出报告");
+    throw new Error(t("当前 HID 接口不支持配对所需的输入 / 输出报告"));
   return device;
 }
 
@@ -124,7 +125,7 @@ async function routingIo<T>(
       operation(),
       new Promise<never>((_resolve, reject) => {
         timer = setTimeout(
-          () => reject(new Error("配对通道只读检查超时，尚未发送配对命令")),
+          () => reject(new Error(t("配对通道只读检查超时，尚未发送配对命令"))),
           options.ioTimeoutMs ?? 1200,
         );
         abort = () => reject(routingCancelled());
@@ -253,10 +254,10 @@ export async function resolvePairingInterface(
     candidates.some((device) => !hasFeatureZero(device.collections, true))
   )
     throw new Error(
-      "无法确认配对通道：需要同一接收器的两个完整接口。请只保留目标 1K 或 8K 接收器并重新选择；仍失败时请导出诊断。",
+      t("无法确认配对通道：需要同一接收器的两个完整接口。请只保留目标 1K 或 8K 接收器并重新选择；仍失败时请导出诊断。"),
     );
   candidates.forEach((device) => selectPairingInterface([device]));
-  options.onProgress?.("正在只读检查接收器的配对和配置通道…");
+  options.onProgress?.(t("正在只读检查接收器的配对和配置通道…"));
   const probes: PairingProbe[] = [];
   for (const [index, device] of candidates.entries()) {
     if (options.signal?.aborted) throw routingCancelled();
@@ -276,7 +277,7 @@ export async function resolvePairingInterface(
   if (pairing !== -1 && role(probes[1 - pairing], "settings"))
     return candidates[pairing];
   throw new Error(
-    "接口只读检查结果不足以确认配对通道，尚未发送配对命令。请重新插拔接收器，或导出诊断以核对接口。",
+    t("接口只读检查结果不足以确认配对通道，尚未发送配对命令。请重新插拔接收器，或导出诊断以核对接口。"),
   );
 }
 
@@ -284,24 +285,24 @@ export async function resolvePairingInterface(
 export async function requestPairingDevices(
   hid = getHidApi(),
 ): Promise<HidDevice[]> {
-  if (!hid) throw new Error("配对需要桌面版 Chrome / Edge 的 WebHID 支持");
+  if (!hid) throw new Error(t("配对需要桌面版 Chrome / Edge 的 WebHID 支持"));
   const devices = await hid.requestDevice({
     filters: PAIRING_PRODUCT_IDS.map((productId) => ({
       vendorId: VENDOR_ID,
       productId,
     })),
   });
-  if (!devices.length) throw new Error("未选择接收器，配对未开始");
+  if (!devices.length) throw new Error(t("未选择接收器，配对未开始"));
   return devices;
 }
 
 function routingCancelled(): Error {
-  return new Error("已停止只读检查，尚未发送配对命令");
+  return new Error(t("已停止只读检查，尚未发送配对命令"));
 }
 
 function cancelled(): Error {
   return new Error(
-    "已停止等待配对。已发送的配对命令无法撤回；接收器可能继续等待，请重新连接检查状态。",
+    t("已停止等待配对。已发送的配对命令无法撤回；接收器可能继续等待，请重新连接检查状态。"),
   );
 }
 
@@ -338,7 +339,7 @@ export async function pairReceiver(
         new Promise<never>((_resolve, reject) => {
           timeout = setTimeout(
             () =>
-              reject(new Error("配对接口 I/O 超时，请重新插拔接收器后重试")),
+              reject(new Error(t("配对接口 I/O 超时，请重新插拔接收器后重试"))),
             ioTimeout,
           );
           abort = () => reject(cancelled());
@@ -363,7 +364,7 @@ export async function pairReceiver(
     });
   try {
     checkCancelled();
-    options.onProgress?.("正在打开接收器的配对通道…");
+    options.onProgress?.(t("正在打开接收器的配对通道…"));
     if (!device.opened) {
       const opening = device.open();
       // WebHID open itself cannot be aborted. Close a late completion as well.
@@ -394,13 +395,13 @@ export async function pairReceiver(
         else if (data[6] === 3) resolve("paired");
         else if (data[6] === 4)
           reject(
-            new Error("接收器报告配对失败。请让鼠标重新进入配对模式后重试。"),
+            new Error(t("接收器报告配对失败。请让鼠标重新进入配对模式后重试。")),
           );
         received = true;
       }) as EventListener;
       disconnectListener = ((event: Event & { device?: HidDevice }) => {
         if (event.device === device)
-          reject(new Error("接收器已拔出，配对结果未确认"));
+          reject(new Error(t("接收器已拔出，配对结果未确认")));
       }) as EventListener;
       abortListener = () => reject(cancelled());
       device.addEventListener!("inputreport", inputListener);
@@ -410,7 +411,7 @@ export async function pairReceiver(
         () =>
           reject(
             new Error(
-              "30 秒内未确认配对结果。请重新连接检查状态，或让鼠标重新进入配对模式后重试。",
+              t("30 秒内未确认配对结果。请重新连接检查状态，或让鼠标重新进入配对模式后重试。"),
             ),
           ),
         options.timeoutMs ?? PAIRING_TIMEOUT_MS,
@@ -420,7 +421,7 @@ export async function pairReceiver(
     void outcome.catch(() => undefined);
     checkCancelled();
     const report = buildPairingReport();
-    options.onProgress?.("正在配对，最多等待 30 秒。请保持鼠标靠近接收器…");
+    options.onProgress?.(t("正在配对，最多等待 30 秒。请保持鼠标靠近接收器…"));
     sent = true;
     log("out", 0, report);
     checkCancelled();

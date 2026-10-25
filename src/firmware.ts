@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import {
   getHidApi,
   type HidApi,
@@ -117,15 +118,15 @@ export function selectFirmwareInterface(
   if (!device)
     throw new Error(
       mode === "normal"
-        ? "无法确认鼠标刷写通道：请只保留目标有线鼠标，先连接并读取配置，再重新选择同一鼠标。尚未发送刷写命令。"
-        : "未找到唯一的 484D:0003 鼠标引导程序通道，请只保留目标鼠标并重新选择。",
+        ? t("无法确认鼠标刷写通道：请只保留目标有线鼠标，先连接并读取配置，再重新选择同一鼠标。尚未发送刷写命令。")
+        : t("未找到唯一的 484D:0003 鼠标引导程序通道，请只保留目标鼠标并重新选择。"),
     );
   if (
     !device.sendReport ||
     !device.addEventListener ||
     !device.removeEventListener
   )
-    throw new Error("当前 HID 接口不支持固件刷写所需的输入 / 输出报告");
+    throw new Error(t("当前 HID 接口不支持固件刷写所需的输入 / 输出报告"));
   return device;
 }
 
@@ -134,7 +135,7 @@ export async function requestFirmwareDevices(
   mode: FirmwareDeviceMode,
   hid = getHidApi(),
 ): Promise<HidDevice[]> {
-  if (!hid) throw new Error("固件刷写需要桌面版 Chrome / Edge 的 WebHID 支持");
+  if (!hid) throw new Error(t("固件刷写需要桌面版 Chrome / Edge 的 WebHID 支持"));
   const devices = await hid.requestDevice({
     filters: [
       {
@@ -144,12 +145,12 @@ export async function requestFirmwareDevices(
       },
     ],
   });
-  if (!devices.length) throw new Error("未选择鼠标，尚未开始本次操作");
+  if (!devices.length) throw new Error(t("未选择鼠标，尚未开始本次操作"));
   return devices;
 }
 
 async function exclusive<T>(run: () => Promise<T>): Promise<T> {
-  if (inProgress) throw new Error("已有固件操作正在进行，请等待完成");
+  if (inProgress) throw new Error(t("已有固件操作正在进行，请等待完成"));
   inProgress = true;
   try {
     return await run();

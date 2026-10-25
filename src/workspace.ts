@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import {
   PROFILE_COUNT,
   defaultGlobal,
@@ -25,7 +26,7 @@ export interface ProfileFile {
 export const clone = <T>(value: T): T => structuredClone(value);
 export function makeProfile(index: number): WorkspaceProfile {
   return {
-    name: `配置 ${index}`,
+    name: t`配置 ${index}`,
     dpiLayoutPending: false,
     global: defaultGlobal(),
     profile: defaultProfile(index),
@@ -35,16 +36,16 @@ export function parseProfileFile(
   text: string,
   profileIndex: number,
 ): WorkspaceProfile {
-  if (text.length > 200_000) throw new Error("配置文件过大");
+  if (text.length > 200_000) throw new Error(t("配置文件过大"));
   const file = JSON.parse(text) as ProfileFile;
   if (
     file.format !== "pulsar-fusion-web" ||
     file.version !== 1 ||
     file.device !== "xlite-v4"
   )
-    throw new Error("请选择此 Web 版导出的 Xlite v4 配置文件");
+    throw new Error(t("请选择此 Web 版导出的 Xlite v4 配置文件"));
   if (typeof file.name !== "string" || file.name.length > 80)
-    throw new Error("配置名称无效");
+    throw new Error(t("配置名称无效"));
   validateGlobal(file.global);
   validateProfile(file.profile);
   return {

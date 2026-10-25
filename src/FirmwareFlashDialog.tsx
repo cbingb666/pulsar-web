@@ -1,3 +1,5 @@
+import { t } from "./i18n";
+import { useLocale } from "./use-locale";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   ArrowUpFromLine,
@@ -51,6 +53,7 @@ export function FirmwareFlashDialog({
   onClose,
   returnFocusTo,
 }: FirmwareFlashDialogProps) {
+  const locale = useLocale();
   const dialogRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [confirmedSha, setConfirmedSha] = useState<string | null>(null);
@@ -68,24 +71,26 @@ export function FirmwareFlashDialog({
     stage
   ];
   const startLabel = {
-    prepare: "选择鼠标并进入升级模式",
-    bootloader: "选择引导设备并刷写",
-    verify: "重新连接鼠标并验证",
-    complete: "已验证完成",
+    prepare: t("选择鼠标并进入升级模式"),
+    bootloader: t("选择引导设备并刷写"),
+    verify: t("重新连接鼠标并验证"),
+    complete: t("已验证完成"),
   }[stage];
   const busyLabel = {
-    prepare: "正在进入升级模式…",
-    bootloader: "正在刷写…",
-    verify: "正在验证版本…",
-    complete: "已验证完成",
+    prepare: t("正在进入升级模式…"),
+    bootloader: t("正在刷写…"),
+    verify: t("正在验证版本…"),
+    complete: t("已验证完成"),
   }[stage];
   const stageDescription = {
-    prepare:
+    prepare: t(
       "第 1 步：校验文件后选择有线连接的 Xlite v4 Mini，让鼠标进入升级模式。随后设备会重新出现在浏览器列表中。",
-    bootloader:
+    ),
+    bootloader: t(
       "第 2 步：点击下方按钮重新授权引导设备。它可能显示为通用 HID 名称，不含 Pulsar 字样；请确保只连接这一只目标鼠标。",
-    verify: `第 3 步：等待鼠标重启，再点击下方按钮选择有线连接的 Xlite v4 Mini。读取到版本 ${targetVersion} 后才会确认刷写成功。`,
-    complete: `三步已完成，设备版本已验证为 ${displayedVersion ?? targetVersion}。可以关闭窗口继续使用鼠标。`,
+    ),
+    verify: t`第 3 步：等待鼠标重启，再点击下方按钮选择有线连接的 Xlite v4 Mini。读取到版本 ${targetVersion} 后才会确认刷写成功。`,
+    complete: t`三步已完成，设备版本已验证为 ${displayedVersion ?? targetVersion}。可以关闭窗口继续使用鼠标。`,
   }[stage];
   const percent = Math.round(
     Math.max(
@@ -172,7 +177,7 @@ export function FirmwareFlashDialog({
       >
         <button
           className="icon-button close-dialog"
-          aria-label="关闭固件刷写窗口"
+          aria-label={t("关闭固件刷写窗口")}
           disabled={busy}
           onClick={onClose}
         >
@@ -185,23 +190,26 @@ export function FirmwareFlashDialog({
           <div>
             <span className="eyebrow">XLITE V4 MINI · USB</span>
             <h2 ref={titleRef} tabIndex={-1} id={titleId}>
-              刷写鼠标固件
+              {t("刷写鼠标固件")}
             </h2>
           </div>
         </div>
         <p className="firmware-flash-intro" id={descriptionId}>
-          仅支持 Xlite v4 Mini 鼠标本体通过 USB 数据线直接连接电脑刷写。
-          请只保留这一只目标鼠标，拔下其他 Pulsar 鼠标和接收器。
+          {t(
+            "仅支持 Xlite v4 Mini 鼠标本体通过 USB 数据线直接连接电脑刷写。 请只保留这一只目标鼠标，拔下其他 Pulsar 鼠标和接收器。",
+          )}
         </p>
         <div className="firmware-flash-note">
           <Info size={17} aria-hidden="true" />
           <div>
-            <strong>实验性刷写，已完成一次 Xlite v4 Mini 实机验证</strong>
-            <p>刷写期间保持供电和 USB 连接，勿关闭或刷新页面。</p>
+            <strong>
+              {t("实验性刷写，已完成一次 Xlite v4 Mini 实机验证")}
+            </strong>
+            <p>{t("刷写期间保持供电和 USB 连接，勿关闭或刷新页面。")}</p>
           </div>
         </div>
 
-        <ol className="firmware-flash-steps" aria-label="刷写步骤">
+        <ol className="firmware-flash-steps" aria-label={t("刷写步骤")}>
           {["进入升级模式", "刷写固件", "重连并验证"].map((label, index) => (
             <li
               key={label}
@@ -217,7 +225,7 @@ export function FirmwareFlashDialog({
               <span className="firmware-flash-step-number" aria-hidden="true">
                 {index < stepIndex ? <Check size={12} /> : index + 1}
               </span>
-              <span>{label}</span>
+              <span>{t(label)}</span>
             </li>
           ))}
         </ol>
@@ -227,14 +235,14 @@ export function FirmwareFlashDialog({
 
         <div className="firmware-flash-file">
           <div className="firmware-flash-file-heading">
-            <label htmlFor={fileId}>选择固件文件</label>
+            <label htmlFor={fileId}>{t("选择固件文件")}</label>
             <a
               className="text-button"
               href="https://www.pulsar.gg/pages/download"
               target="_blank"
               rel="noreferrer"
             >
-              Pulsar 官方下载 ↗
+              {t("Pulsar 官方下载 ↗")}
             </a>
           </div>
           <input
@@ -252,42 +260,43 @@ export function FirmwareFlashDialog({
             }}
           />
           <p className="firmware-flash-hint" id={fileHintId}>
-            支持已适配的官方 1.0.1.7 版本 .exe 升级程序或 .bin 固件。
-            网页提取并校验固件，不运行 .exe。
+            {t(
+              "支持已适配的官方 1.0.1.7 版本 .exe 升级程序或 .bin 固件。 网页提取并校验固件，不运行 .exe。",
+            )}
           </p>
         </div>
 
         {validating && (
           <div className="firmware-flash-status" role="status">
             <LoaderCircle className="spin" size={18} aria-hidden="true" />
-            <span>正在校验文件与目标型号…</span>
+            <span>{t("正在校验文件与目标型号…")}</span>
           </div>
         )}
         {firmware && !validating && (
           <div className="firmware-flash-package">
             <div className="firmware-flash-versions">
               <div>
-                <span>当前版本</span>
-                <strong>{displayedVersion ?? "连接后读取"}</strong>
+                <span>{t("当前版本")}</span>
+                <strong>{displayedVersion ?? t("连接后读取")}</strong>
               </div>
               <span aria-hidden="true">→</span>
               <div>
-                <span>目标版本</span>
+                <span>{t("目标版本")}</span>
                 <strong>{firmware.version}</strong>
               </div>
             </div>
             <dl>
               <div>
-                <dt>文件</dt>
+                <dt>{t("文件")}</dt>
                 <dd>{firmware.name}</dd>
               </div>
               <div>
-                <dt>目标型号</dt>
-                <dd>{firmware.target}</dd>
+                <dt>{t("目标型号")}</dt>
+                <dd>{t(firmware.target)}</dd>
               </div>
               <div>
-                <dt>固件大小</dt>
-                <dd>{firmware.size.toLocaleString("zh-CN")} 字节</dd>
+                <dt>{t("固件大小")}</dt>
+                <dd>{t`${firmware.size.toLocaleString(locale)} 字节`}</dd>
               </div>
               <div className="firmware-flash-hash">
                 <dt>SHA-256</dt>
@@ -300,7 +309,9 @@ export function FirmwareFlashDialog({
         {requiresConfirmation && (
           <>
             <p className="firmware-flash-hint">
-              刷写前建议导出配置和宏；本地草稿会保留，设备配置是否保留需刷写后检查。
+              {t(
+                "刷写前建议导出配置和宏；本地草稿会保留，设备配置是否保留需刷写后检查。",
+              )}
             </p>
             <label className="firmware-flash-confirm">
               <input
@@ -314,9 +325,9 @@ export function FirmwareFlashDialog({
                 }
               />
               <span>
-                我确认只连接这一只 Xlite v4 Mini 鼠标，已拔下其他 Pulsar
-                鼠标和接收器， 用 USB
-                数据线直接连接电脑，并会保持连接和供电直到刷写结束。
+                {t(
+                  "我确认只连接这一只 Xlite v4 Mini 鼠标，已拔下其他 Pulsar 鼠标和接收器， 用 USB 数据线直接连接电脑，并会保持连接和供电直到刷写结束。",
+                )}
               </span>
             </label>
           </>
@@ -326,8 +337,9 @@ export function FirmwareFlashDialog({
           <div className="firmware-flash-status error" role="alert">
             <Info size={18} aria-hidden="true" />
             <span>
-              当前环境不支持 WebHID，请在桌面版 Chrome 或 Edge 中通过 localhost
-              或 HTTPS 打开。
+              {t(
+                "当前环境不支持 WebHID，请在桌面版 Chrome 或 Edge 中通过 localhost 或 HTTPS 打开。",
+              )}
             </span>
           </div>
         )}
@@ -352,7 +364,7 @@ export function FirmwareFlashDialog({
               </div>
             )}
             <p className="firmware-flash-hint">
-              刷写开始后无法从此窗口取消，请等待设备返回结果。
+              {t("刷写开始后无法从此窗口取消，请等待设备返回结果。")}
             </p>
           </div>
         )}
@@ -378,13 +390,13 @@ export function FirmwareFlashDialog({
               onClick={onBack}
             >
               {stage === "bootloader"
-                ? "设备仍是 Xlite v4？返回第一步"
-                : "设备仍在升级模式？返回刷写"}
+                ? t("设备仍是 Xlite v4？返回第一步")
+                : t("设备仍在升级模式？返回刷写")}
             </button>
           )}
         <div className="firmware-flash-actions">
           <button className="button" disabled={busy} onClick={onClose}>
-            关闭
+            {t("关闭")}
           </button>
           <button
             className="button primary"

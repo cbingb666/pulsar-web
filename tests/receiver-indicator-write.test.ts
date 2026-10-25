@@ -345,7 +345,7 @@ for (const batteryPercent of [101, 254]) {
   test(`invalid battery value ${batteryPercent} still rejects the indicator save`, async () => {
     const fake = indicatorReceiver({ batteryPercent });
     try {
-      await assert.rejects(fake.client.writePower({ receiverIndicator: 2 }, 1), /Battery percent/);
+      await assert.rejects(fake.client.writePower({ receiverIndicator: 2 }, 1), /电量百分比/);
       assert.equal(fake.writes().length, 1);
     } finally {
       await fake.client.dispose();

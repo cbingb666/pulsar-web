@@ -1,91 +1,95 @@
-# Xlite v4 Mini firmware flashing
+<!-- canonical-language: zh-CN -->
 
-Investigation date: 2026-10-19. This implementation supports the original Xlite v4 Mini mouse over a USB cable, using the verified original XS1 `1.0.1.7` firmware image. The normal device is `3710:3401`; its updater bootloader is `484d:0003`. Receiver flashing, wireless flashing, other mouse models, CrazyLight/Gen.2 firmware, arbitrary images, and other firmware versions are outside this implementation's accepted scope.
+# Xlite v4 Mini 固件刷写
 
-The transfer protocol below was recovered by static inspection of the official Windows updater. It is not a published Pulsar protocol specification. On 2026-10-19, the user's Xlite v4 Mini completed an in-app Chromium/WebHID USB update from `00.00.10.16` to `00.00.10.17`, including bootloader entry, checksum acceptance, reboot, and version readback. This is one verified device/image path, not acceptance of other models or interrupted-update recovery.
+[中文（规范源）](firmware.md) · [English](en/firmware.md)
 
-## Official source and file validation
+调查日期：2026-10-19。本实现仅支持原版 Xlite v4 Mini 鼠标通过 USB 数据线刷写已验证的原版 XS1 `1.0.1.7` 固件。正常设备为 `3710:3401`，升级引导器为 `484d:0003`。不接受接收器刷写、无线刷写、其他鼠标、CrazyLight/Gen.2 固件、任意镜像或其他固件版本。
 
-The [official Pulsar download page](https://www.pulsar.gg/pages/download) lists `V1.0.1.7`, dated `2025-01-23`, for the standard Xlite v4 Mini, Medium, and Large. Its listed change addresses intermittent freezing during macros. The product sections link to this exact [XS1 v1017/v125 T01 ZIP package](https://www.pulsar.gg/cdn/shop/files/Pulsar_Firmware_XS1_v1017_v125_T01.zip?v=17283837107428289241).
+以下传输协议由官方 Windows 升级器静态恢复，不是 Pulsar 公开协议。2026-10-19，用户的 Xlite v4 Mini 在内嵌 Chromium/WebHID 中完成 USB 升级 `00.00.10.16 → 00.00.10.17`，包括进入引导、校验和接受、重启和版本回读。这只验证一条设备/镜像路径，不代表其他型号或中断恢复已验收。
 
-| Artifact | Size in bytes | SHA-256 |
+## 官方来源与文件校验
+
+[Pulsar 官方下载页](https://www.pulsar.gg/pages/download) 为标准 Xlite v4 Mini、Medium、Large 列出 `V1.0.1.7`，日期 `2025-01-23`，变更为解决宏执行期间偶发冻结。产品各节链接至此 [XS1 v1017/v125 T01 ZIP](https://www.pulsar.gg/cdn/shop/files/Pulsar_Firmware_XS1_v1017_v125_T01.zip?v=17283837107428289241)。
+
+| 文件 | 字节数 | SHA-256 |
 | --- | ---: | --- |
 | `Pulsar_Firmware_XS1_v1017_v125_T01.zip` | 2,463,017 | `5ad169927c977bdc96bc2faae896d0136e5d346d87b2dfb4640aededf5ba5bc6` |
-| `Pulsar_Updater_v1017_v125_T01.exe` inside the ZIP | 4,830,208 | `64260b82185aa80bcb70fcab427340139c115ae95f4e0fd2101e0bdf54ee30d5` |
-| Extracted normal mouse image | 120,020 | `53b7aa8ca14600d385448263d2d1761d7d4517c9c3fb4d59b7657c6a9b6ba29a` |
+| ZIP 内的 `Pulsar_Updater_v1017_v125_T01.exe` | 4,830,208 | `64260b82185aa80bcb70fcab427340139c115ae95f4e0fd2101e0bdf54ee30d5` |
+| 提取的正常鼠标镜像 | 120,020 | `53b7aa8ca14600d385448263d2d1761d7d4517c9c3fb4d59b7657c6a9b6ba29a` |
 
-`src/firmware-package.ts` accepts the exact EXE or the exact extracted mouse image, checking both size and SHA-256. A filename or extension alone never establishes compatibility. ZIP archives are not imported directly: the user extracts the official archive and selects its EXE. The EXE is read as bytes and is never executed. The application does not bundle or redistribute the firmware.
+`src/firmware-package.ts` 仅接受上述精确 EXE 或提取镜像，同时检查大小和 SHA-256。文件名/扩展名单独不能证明兼容。不能直接导入 ZIP：用户自行解压并选择 EXE。EXE 仅按字节读取，不执行；应用不捆绑或再分发固件。
 
-For the accepted EXE, the importer extracts the half-open byte range `[0x261210, 0x27e6e4)`: offset `2,494,992`, length `0x1d4d4` / `120,020`. It then verifies the extracted image's SHA-256 independently. Validated bytes remain private to the importer; callers receive immutable metadata, and fabricated metadata objects cannot authorize a transfer.
+接受的 EXE 提取范围为半开区间 `[0x261210, 0x27e6e4)`：偏移 `2,494,992`，长度 `0x1d4d4` / `120,020`，再独立校验镜像 SHA-256。已验证字节由导入器私有保存；调用方仅获得不可变元数据，伪造元数据不能授权传输。
 
-The updater's PE image base is `0x140000000`. Mouse firmware data resides at VA `0x140262a10`. The selector at `0x140004d0f` through `0x140004d2e` chooses that address and length `0x1d4d4` when the updater object's mouse/dongle flag at offset `0x20` is zero. The other branch selects the 1K dongle image; that branch is not exposed here.
+升级器 PE 基址为 `0x140000000`，鼠标固件位于 VA `0x140262a10`。选择器 `0x140004d0f`–`0x140004d2e` 在升级对象偏移 `0x20` 的鼠标/接收器标志为零时，选此地址及长度 `0x1d4d4`；另一分支选择 1K 接收器镜像，本实现不开放。
 
-The mouse image includes this USB device descriptor at image offset `0x1d3cc`:
+鼠标镜像偏移 `0x1d3cc` 含 USB 设备描述符：
 
 ```text
 12 01 00 02 00 00 00 40 10 37 01 34 17 10 01 02 00 01
 ```
 
-It identifies VID `0x3710`, PID `0x3401`, and `bcdDevice 0x1017`. The website's release label is `1.0.1.7`; the configuration transport returns `00.00.10.17`. Both browser and independent native readback confirmed that raw value after the 2026-10-19 flash. The UI displays the zero-extended packed BCD value as `1.0.1.7` in labels and messages, while protocol comparisons and diagnostics retain the raw version. Unknown encodings are displayed unchanged. The official page and freshly downloaded package hashes were rechecked that day; `1.0.1.7` remained the latest firmware listed for the standard Xlite v4 Mini.
+它标识 VID `0x3710`、PID `0x3401`、`bcdDevice 0x1017`。官网版本为 `1.0.1.7`，配置传输返回 `00.00.10.17`。2026-10-19 刷写后浏览器和独立原生读取均确认原始值。界面将补零的 packed BCD 显示为 `1.0.1.7`，协议比较和诊断保留原值；未知编码原样显示。当天重新检查官网和新下载包哈希，标准 Xlite v4 Mini 最新列出的固件仍为 `1.0.1.7`。
 
-Local, ignored research artifacts are stored under `.local/firmware-research/`, including `official-xs1-evidence.json`, the official package, the extracted `candidate-3.bin`, and `xs1/updater.asm`. The hashes and offsets above make the extraction reproducible without committing vendor binaries.
+忽略提交的本地证据位于 `.local/firmware-research/`，包括 `official-xs1-evidence.json`、官方包、提取的 `candidate-3.bin` 和 `xs1/updater.asm`。上述哈希和偏移允许复现提取，无需提交厂商二进制。
 
-## Interface selection
+## 接口选择
 
-The native mouse device table at VA `0x1402afef0` contains the `3710:3401` entry:
+原生鼠标设备表 VA `0x1402afef0` 包含 `3710:3401`：
 
 ```text
 10 37 01 34 01 00 02 00
 ```
 
-The row encodes VID/PID, DCDU protocol type `1`, normal-device state, and Windows interface number `2` (`MI02`). The same table includes bootloader `484d:0003` with DCDU type `1` and bootloader state. Enumeration at `0x140004100` uses that table and the interface-qualified device path. Bootloader selection follows the normal entry routine at `0x140004770`, specifically `0x140004978` through `0x1400049b3`.
+该行编码 VID/PID、DCDU 类型 `1`、正常设备状态和 Windows 接口号 `2`（`MI02`）。同表包含 DCDU 类型 `1`、引导状态的 `484d:0003`。枚举 `0x140004100` 使用该表及包含接口号的设备路径。引导器选择沿正常入口 `0x140004770`，具体为 `0x140004978`–`0x1400049b3`。
 
-The mouse image contains identical vendor report descriptors at image offsets `0x1a607` and `0x1a668`:
+鼠标镜像偏移 `0x1a607`、`0x1a668` 有相同厂商报告描述符：
 
 ```text
 06 ff ff 09 01 a1 01 15 81 25 7f 75 08 95 40
 09 02 81 02 09 03 91 02 09 04 b1 82 c0
 ```
 
-Both declare usage page `0xffff`, usage `1`, and unnumbered 64-byte input, output, and feature reports. The usage and report sizes alone cannot distinguish the updater and settings interfaces.
+两者均声明 usage page `0xffff`、usage `1`、无编号的 64 字节输入/输出/Feature 报告。仅凭 usage 和大小无法区分升级与设置接口。
 
-WebHID does not expose the Windows `MI02` path. The browser adapter therefore requires exactly two matching normal vendor interfaces and the exact device object that already passed the settings handshake. It selects the other interface, failing before transmission if this cannot be established. This selection and browser bootloader entry succeeded on the tested mouse on 2026-10-19. Keep only the target wired mouse connected throughout the flow.
+WebHID 不提供 Windows `MI02` 路径，因此浏览器适配器要求恰好两个匹配的正常厂商接口，以及已通过设置握手的同一设备对象，随后选择另一接口；无法确认时在发送前失败。2026-10-19 该选择和浏览器进入引导在实测鼠标上成功。全过程只连接目标有线鼠标。
 
-After entry, the browser requires a separate user device selection for the new `484d:0003` identity and accepts exactly one matching interface with 64-byte report-ID-zero input/output reports. The live `USB Bootloader` descriptor captured in `.local/firmware-bootloader-ioreg.plist` advertises Generic Desktop / Undefined (`usagePage 1`, `usage 0`), which the selector now accepts. The vendor-defined usage-page alternative (`0xff00..0xffff`) remains supported but was not exercised by this device. This bootloader ID is shared by supported original XS1 mice and does not independently identify an Xlite v4 Mini. The user must select the same target mouse, including when resuming from bootloader mode.
+进入后用户需单独选择新身份 `484d:0003`，浏览器只接受恰好一个匹配接口，输入/输出 report ID 为零、64 字节。`.local/firmware-bootloader-ioreg.plist` 捕获的 `USB Bootloader` 为 Generic Desktop / Undefined（`usagePage 1`、`usage 0`），现已接受。也保留厂商 usage page（`0xff00..0xffff`）替代形式，但本机未验证。此引导 ID 为多个支持的原版 XS1 鼠标共用，不能独立证明是 Xlite v4 Mini。用户必须选择同一目标鼠标，从引导模式继续时也一样。
 
-## DCDU transfer sequence
+## DCDU 传输顺序
 
-All offsets in this section address the 64-byte payload. Native HIDAPI passes 65 bytes to `hid_write`: a leading zero report-ID byte followed by the payload. WebHID expresses the same transfer with `sendReport(0, payload)`. Flashing uses output reports and input-report acknowledgements, not the feature-report configuration transport.
+本节偏移基于 64 字节载荷。原生 HIDAPI 的 `hid_write` 发送 65 字节：前导零 report ID 加载荷；WebHID 等价调用为 `sendReport(0, payload)`。刷写使用 Output 报告和 Input 应答，不使用配置 Feature 传输。
 
-Command payloads start with `44 43 44 55 00` (`DCDU` and a zero byte). Byte `5` is the command. Unused bytes are zero. Acknowledgements to commands `01`, `02`, and `03` must echo bytes `0..5` and return status `01` at byte `6`.
+命令以 `44 43 44 55 00`（`DCDU` 加零）开头，字节 `5` 为命令，未使用字节为零。命令 `01`、`02`、`03` 的应答必须回显字节 `0..5`，且字节 `6` 状态为 `01`。
 
-| Stage | Payload / response | Native evidence |
+| 步骤 | 载荷/响应 | 原生证据 |
 | --- | --- | --- |
-| Enter bootloader on normal MI02 | `44 43 44 55 00 ff`, followed by zeros. The device re-enumerates as `484d:0003`; no command ACK is read. | `0x1400048a6` through `0x140004976`; identity selection at `0x140004978` |
-| Erase | Command `01`; require matching ACK and successful status. | `0x140004d3d` through `0x140004e3c` |
-| Set image length | Command `02`; bytes `6..9` contain `120020` as `d4 d4 01 00` (`u32LE`). Require matching ACK/status, then wait 10 ms. | `0x140004e78` through `0x140004f84` |
-| Write image | Sequential raw 64-byte output payloads, with no DCDU header, block index, or per-block ACK. There are 1,876 payloads for this image. | `0x140004fb0` through `0x14000512a`; helper `0x140004530` with a null response pointer |
-| Verify transfer | Command `03`; require matching ACK/status and a `u16LE` checksum at reply bytes `7..8`. | `0x14000513b` through `0x140005254` |
-| Reboot | After a valid checksum, wait 10 ms and send command `04`. No reboot ACK is read. | `0x14000525a` through `0x1400052e5` |
+| 正常 MI02 进入引导 | `44 43 44 55 00 ff` 后补零；重新枚举为 `484d:0003`，不读取 ACK | `0x1400048a6`–`0x140004976`；身份选择 `0x140004978` |
+| 擦除 | 命令 `01`；要求匹配 ACK 及成功状态 | `0x140004d3d`–`0x140004e3c` |
+| 设置镜像长度 | 命令 `02`；字节 `6..9` 为 `120020`，即 `d4 d4 01 00`（`u32LE`）；匹配 ACK/状态后等 10 ms | `0x140004e78`–`0x140004f84` |
+| 写镜像 | 顺序发送原始 64 字节载荷，没有 DCDU 头、块号或逐块 ACK；共 1,876 包 | `0x140004fb0`–`0x14000512a`；空响应指针的辅助函数 `0x140004530` |
+| 校验传输 | 命令 `03`；要求匹配 ACK/状态及响应字节 `7..8` 的 `u16LE` 校验和 | `0x14000513b`–`0x140005254` |
+| 重启 | 校验和正确后等 10 ms，再发 `04`；不读取重启 ACK | `0x14000525a`–`0x1400052e5` |
 
-The updater sums every byte of each transmitted 64-byte data payload, wrapping to 16 bits. The final payload contains only 20 new firmware bytes. Native `memcpy` at `0x140004fc8` replaces those bytes in the existing block buffer, leaving its final 44 bytes from the preceding block. Those retained bytes are also transmitted and included in the checksum. Therefore the expected wire checksum is `0xcf00`; the checksum of the 120,020 raw firmware bytes alone is `0xc902` and must not be substituted. Zero-padding the last payload would not reproduce the native transfer.
+升级器对每个实际发送的 64 字节包逐字节求和，按 16 位回绕。末包仅有 20 个新固件字节；原生 `0x140004fc8` 的 `memcpy` 只替换现有缓冲前 20 字节，尾部 44 字节沿用前包。这些保留字节也发送并计入校验。因此预期线上校验和为 `0xcf00`，不能用仅 120,020 字节原始镜像的 `0xc902` 替代。末包补零不符合原版传输。
 
-The browser implementation registers its input listener before sending each command, including when an ACK arrives before `sendReport` resolves. It additionally requires report ID `0` and a complete 64-byte response. Erase ACKs have a 10-second deadline; preparation/verification ACKs have a 1-second deadline; normal I/O has a separate bounded timeout. The erase deadline was extended after the live ACK took 4,945 ms, close to the previous 5-second limit; no automatic retry was added. These are browser adapter deadlines, not claims about guaranteed hardware timing. The native erase loop permits 5,000 empty reads with 1 ms sleeps; its preparation/verification loops permit 100 empty reads with 1 ms sleeps.
+浏览器在发送每个命令前注册输入监听，即使 ACK 早于 `sendReport` 完成也能接收；另要求 report ID `0` 和完整 64 字节响应。擦除 ACK 期限 10 秒；准备/校验 ACK 期限 1 秒；正常 I/O 另有有界超时。实机擦除 ACK 用时 4,945 ms、接近原 5 秒期限后延长期限，没有增加自动重试。这是适配器期限，不保证硬件时序。原生擦除循环允许 5,000 次空读、每次休眠 1 ms；准备/校验允许 100 次空读、每次 1 ms。
 
-On rejected status, malformed/stale ACK, checksum mismatch, unexpected disconnect, abort, or I/O timeout, the implementation stops subsequent transmission and performs no automatic replay. A successful checksum and reboot dispatch are still not a successful post-update version check. The UI reconnects the normal settings interface and verifies the expected version before declaring the update confirmed.
+状态拒绝、损坏/过期 ACK、校验和不符、意外断连、中止或 I/O 超时时停止后续发送，不自动重放。校验和成功且重启命令已发送仍不等于升级后版本验证成功；界面需重新连接正常设置接口并确认预期版本。
 
-The updater also contains a separate `23DG` path at `0x140005370` and firmware for other device types. Its commands and additional images are not used for the accepted `3710:3401` DCDU path.
+升级器 `0x140005370` 还有独立 `23DG` 路径及其他设备固件，其命令和镜像均不用于本实现的 `3710:3401` DCDU 路径。
 
-## Verification boundary
+## 验证边界
 
-`tests/firmware.test.ts` covers command fixtures, native final-block retention, checksum wrapping, strict ACK validation, interface ambiguity, permission filters, boot entry, cleanup, timeout, and abort behavior. State-machine tests use a synthetic image, including checksum refusal, disconnects, send failures and delayed completion; they run without vendor binaries. When the ignored official EXE exists at `.local/firmware-research/xs1/Pulsar_Updater_v1017_v125_T01.exe`, one additional test imports that real image and runs a complete 1,876-block transfer against a fake HID device, checking `0xcf00` and final command order. This additional test is skipped when the vendor EXE is absent.
+`tests/firmware.test.ts` 覆盖命令样本、原版末包保留、校验和回绕、严格 ACK、接口歧义、授权筛选、进入引导、清理、超时、中止。状态机测试使用合成镜像，覆盖校验拒绝、断连、发送失败、延迟完成，不依赖厂商二进制。若忽略提交的 `.local/firmware-research/xs1/Pulsar_Updater_v1017_v125_T01.exe` 存在，附加测试会导入真实镜像并在假 HID 设备完整传输 1,876 包，检查 `0xcf00` 和最终命令顺序；没有 EXE 时跳过。
 
-Importer tests verify the accepted file sizes/hashes, rejection of modified or unrelated data, extraction boundaries, and isolation of validated bytes. The static review independently matched the implementation's packet order, length encoding, report framing, final-block handling, checksum, and reboot gate against the native assembly.
+导入测试检查允许的大小/哈希、修改/无关内容拒绝、提取边界和已验证字节隔离。静态审查另将包顺序、长度编码、报告封装、末包、校验和及重启条件与原生汇编逐项比对。
 
-## 2026-10-19 live USB acceptance
+## 2026-10-19 USB 实机验收
 
-The production flow in Codex's in-app browser on macOS (Chromium 155) completed the official `1.0.1.7` update. `.local/firmware-browser-live-20261019.json` records eight control/ACK events: boot entry, erase and its ACK, length and its ACK, checksum and its ACK (`00 cf` = `0xcf00`), then reboot. The raw firmware stream is intentionally omitted from diagnostics. Browser reconnection confirmed `00.00.10.17` and completed configuration readback; `.local/firmware-live-success-20261019.png` records the success UI.
+macOS Codex 内嵌浏览器（Chromium 155）的生产流程完成官方 `1.0.1.7` 升级。`.local/firmware-browser-live-20261019.json` 记录八条控制/ACK：进入引导、擦除及 ACK、长度及 ACK、校验及 ACK（`00 cf` = `0xcf00`）、重启。诊断有意不保存原始固件流。浏览器重连确认 `00.00.10.17` 并完成配置回读，成功界面见 `.local/firmware-live-success-20261019.png`。
 
-Independent read-only comparison in `.local/firmware-live-verification-20261019.json` reports `ok: true`, comparing `.local/hardware-client-2026-10-19T03-53-16-690Z-backup.json` with `.local/hardware-client-2026-10-19T04-01-19-145Z-backup.json`. All six profile records, the active profile/available profile list, active performance settings, sleep/low-power settings, and the empty macro inventory were unchanged; version changed from `00.00.10.16` to `00.00.10.17`. The read-only backup did not switch profiles, so this does not establish every inactive profile's performance settings. An empty inventory also does not test preservation of nonempty macros.
+独立只读对比 `.local/firmware-live-verification-20261019.json` 为 `ok: true`，比较 `.local/hardware-client-2026-10-19T03-53-16-690Z-backup.json` 与 `.local/hardware-client-2026-10-19T04-01-19-145Z-backup.json`。六个配置记录、活动配置/可用列表、活动性能设置、休眠/低电量和空宏清单均未改变，版本由 `00.00.10.16` 变为 `00.00.10.17`。只读备份未切换配置，不能证明全部非活动配置性能设置；空宏列表也不验证非空宏保留。
 
-This run verifies the browser's normal-interface selection, bootloader permission/re-enumeration, transfer checksum, reboot, and wired version/configuration readback for this mouse and image. Power loss, interrupted-update recovery, other images/models, and post-update 8K wireless reconnection/pairing were not tested. Simulated failure tests do not establish physical recovery behavior.
+本次验证此鼠标/镜像的浏览器正常接口选择、引导授权/重新枚举、传输校验和、重启及有线版本/配置回读。断电、中断恢复、其他镜像/型号、升级后 8K 无线重连/配对未测试。模拟失败测试不证明物理恢复行为。

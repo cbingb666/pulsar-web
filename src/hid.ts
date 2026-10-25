@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import {
   BUTTON_IDS,
   REPORT_SIZE,
@@ -187,7 +188,7 @@ export class PulsarHidClient {
   async connect(): Promise<HidDevice> {
     if (!this.api)
       throw new Error(
-        "当前浏览器不支持 WebHID，请使用桌面版 Chrome 或 Edge，并通过 localhost 或 HTTPS 打开。",
+        t("当前浏览器不支持 WebHID，请使用桌面版 Chrome 或 Edge，并通过 localhost 或 HTTPS 打开。"),
       );
     const devices = await this.api.requestDevice({
       filters: SUPPORTED_PRODUCT_IDS.map((productId) => ({
@@ -197,7 +198,7 @@ export class PulsarHidClient {
       })),
     });
     if (!devices.length)
-      throw new Error("未选择设备。请重新连接并选择 Pulsar 鼠标。");
+      throw new Error(t("未选择设备。请重新连接并选择 Pulsar 鼠标。"));
     return this.connectDevices(devices);
   }
   async reconnect(): Promise<HidDevice | null> {
@@ -244,7 +245,7 @@ export class PulsarHidClient {
             !(probe.byteLength === REPORT_SIZE + 1 && probe.getUint8(0) === 0)
           )
             throw new Error(
-              `接收器接口报告长度不匹配（${probe.byteLength} 字节）`,
+              t`接收器接口报告长度不匹配（${probe.byteLength} 字节）`,
             );
           // The passive read may contain zeros or an old reply. Only the new
           // polling and identity requests below can confirm this connection.
@@ -264,7 +265,7 @@ export class PulsarHidClient {
             ...(device.productId === 0x5403 ? [16, 32, 64] : []),
           ].includes(response[7])
         )
-          throw new Error("设备返回了未知轮询率");
+          throw new Error(t("设备返回了未知轮询率"));
         if (device.productId !== 0x3401) {
           attempt.phase = "identity";
           // Fusion2 receivers are shared across mouse models. The receiver's
@@ -277,7 +278,7 @@ export class PulsarHidClient {
               .map((value) => value.toString(16).padStart(4, "0"))
               .join(":");
             throw new Error(
-              `接收器尚未确认连接 Xlite v4（返回型号 ${id}），已停止连接。请检查鼠标电源和接收器配对。`,
+              t`接收器尚未确认连接 Xlite v4（返回型号 ${id}），已停止连接。请检查鼠标电源和接收器配对。`,
             );
           }
         }
@@ -304,10 +305,10 @@ export class PulsarHidClient {
     const recovery = devices.some(
       (device) => isSupportedDevice(device) && device.productId !== 0x3401,
     )
-      ? "请确认鼠标已开启无线模式并移动鼠标唤醒，关闭其他配置软件或配置网页后重试；仍失败时重新插拔接收器。"
-      : "请关闭占用设备的软件后重试。";
+      ? t("请确认鼠标已开启无线模式并移动鼠标唤醒，关闭其他配置软件或配置网页后重试；仍失败时重新插拔接收器。")
+      : t("请关闭占用设备的软件后重试。");
     throw new Error(
-      `无法读取 Pulsar 配置接口。${recovery}${lastError ? ` ${lastError}` : ""}`,
+      t`无法读取 Pulsar 配置接口。${recovery}${lastError ? ` ${lastError}` : ""}`,
     );
   }
   private async readReceiverIdentity(
@@ -341,7 +342,7 @@ export class PulsarHidClient {
       // to send failures; replies and configuration writes are never retried.
       await delay(30);
       if (this.device !== device || this.epoch !== epoch || !device.opened)
-        throw new Error("设备已断开连接");
+        throw new Error(t("设备已断开连接"));
     }
   }
   private async readReceiverProbe(device: HidDevice): Promise<DataView> {
@@ -351,7 +352,7 @@ export class PulsarHidClient {
         device.receiveFeatureReport(0),
         new Promise<never>((_resolve, reject) => {
           timer = setTimeout(
-            () => reject(new Error("接收器接口读取超时，已停止探测")),
+            () => reject(new Error(t("接收器接口读取超时，已停止探测"))),
             Math.max(1, this.options.timeoutMs ?? 1200),
           );
         }),
@@ -384,7 +385,7 @@ export class PulsarHidClient {
     generation: number,
   ): Promise<void> {
     if (this.openingDevices.has(device) || this.closingDevices.has(device))
-      throw new Error("此 HID 通道的上一项操作尚未结束，请重新插拔设备后重试");
+      throw new Error(t("此 HID 通道的上一项操作尚未结束，请重新插拔设备后重试"));
     if (device.opened) return;
     let abandoned = false;
     const opening = device.open();
@@ -407,7 +408,7 @@ export class PulsarHidClient {
     try {
       await this.boundedHandle(
         opening,
-        "打开 HID 通道超时，请重新插拔设备后重试",
+        t("打开 HID 通道超时，请重新插拔设备后重试"),
       );
       this.assertCurrentConnection(generation);
     } catch (error) {
@@ -428,7 +429,7 @@ export class PulsarHidClient {
     }
     await this.boundedHandle(
       closing,
-      "关闭 HID 通道超时，连接已停用；请重新插拔设备后重试",
+      t("关闭 HID 通道超时，连接已停用；请重新插拔设备后重试"),
     );
   }
   async disconnect(): Promise<void> {
@@ -452,7 +453,7 @@ export class PulsarHidClient {
       )
     )
       throw new Error(
-        "HID 通道尚未完全释放，已停止切换升级模式；请重新插拔鼠标后重试",
+        t("HID 通道尚未完全释放，已停止切换升级模式；请重新插拔鼠标后重试"),
       );
   }
   async dispose(): Promise<void> {
@@ -462,7 +463,7 @@ export class PulsarHidClient {
   }
   private assertCurrentConnection(generation: number): void {
     if (this.disposed || generation !== this.connectionGeneration)
-      throw new Error("设备连接已取消");
+      throw new Error(t("设备连接已取消"));
   }
   private log(direction: "out" | "in", bytes: Uint8Array): void {
     const entry: ProtocolLog = {
@@ -490,9 +491,9 @@ export class PulsarHidClient {
   ): Promise<Uint8Array> {
     const epoch = this.epoch;
     const operation = this.queue.then(async () => {
-      if (epoch !== this.epoch) throw new Error("设备连接已经更改，请重试");
+      if (epoch !== this.epoch) throw new Error(t("设备连接已经更改，请重试"));
       const device = this.device;
-      if (!device?.opened) throw new Error("请先连接鼠标");
+      if (!device?.opened) throw new Error(t("请先连接鼠标"));
       const previousReply =
         this.lastCompletedReply?.device === device &&
         this.lastCompletedReply.epoch === epoch
@@ -523,7 +524,7 @@ export class PulsarHidClient {
       let cachedRetries = 0;
       const assertCurrent = () => {
         if (this.device !== device || epoch !== this.epoch || !device.opened)
-          throw new Error("设备已断开连接");
+          throw new Error(t("设备已断开连接"));
       };
       const io = async <T>(operation: () => Promise<T>): Promise<T> => {
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -541,7 +542,7 @@ export class PulsarHidClient {
                     void this.closeDevice(device).catch(() => undefined);
                     this.options.onDisconnect?.();
                   }
-                  reject(new Error("HID I/O 超时，连接已关闭；请重新连接设备"));
+                  reject(new Error(t("HID I/O 超时，连接已关闭；请重新连接设备")));
                 },
                 Math.max(1, deadline - Date.now()),
               );
@@ -573,14 +574,14 @@ export class PulsarHidClient {
             : 30,
         );
         if (this.device !== device || epoch !== this.epoch || !device.opened)
-          throw new Error("设备已断开连接");
+          throw new Error(t("设备已断开连接"));
       }
       while (Date.now() <= deadline) {
         if (this.device !== device || epoch !== this.epoch)
-          throw new Error("设备已断开连接");
+          throw new Error(t("设备已断开连接"));
         const response = await io(() => device.receiveFeatureReport(0));
         if (this.device !== device || epoch !== this.epoch)
-          throw new Error("设备已断开连接");
+          throw new Error(t("设备已断开连接"));
         // WebHID includes an ID byte for numbered reports, but not report ID 0.
         const bytes = new Uint8Array(
           response.buffer,
@@ -600,11 +601,11 @@ export class PulsarHidClient {
         ) {
           const actual = packet[62] | (packet[63] << 8);
           if (checksum(packet) !== actual)
-            throw new Error("设备响应校验和不匹配，已停止操作");
+            throw new Error(t("设备响应校验和不匹配，已停止操作"));
           // Fusion treats status 05 as offline, unlike pending status 02.
           // This ends the request; a setting write must never be resent here.
           throw new Error(
-            "接收器未收到鼠标响应（状态 05）。请确认鼠标已开启无线模式并移动鼠标唤醒后重试。",
+            t("接收器未收到鼠标响应（状态 05）。请确认鼠标已开启无线模式并移动鼠标唤醒后重试。"),
           );
         }
         if (
@@ -614,8 +615,8 @@ export class PulsarHidClient {
           packet[2] === command.register
         ) {
           if (checksum(packet) !== (packet[62] | (packet[63] << 8)))
-            throw new Error("设备响应校验和不匹配，已停止操作");
-          throw new UnsupportedCommandError("设备不支持或拒绝了此操作");
+            throw new Error(t("设备响应校验和不匹配，已停止操作"));
+          throw new UnsupportedCommandError(t("设备不支持或拒绝了此操作"));
         }
         // Captured 5403 firmware replaces the identity body/length but retains
         // the preceding response's category/register. Discovery has just read
@@ -642,7 +643,7 @@ export class PulsarHidClient {
         ) {
           const actual = packet[62] | (packet[63] << 8);
           if (checksum(packet) !== actual)
-            throw new Error("设备响应校验和不匹配，已停止操作");
+            throw new Error(t("设备响应校验和不匹配，已停止操作"));
           this.lastCompletedReply = { device, epoch, bytes: packet.slice() };
           return packet;
         }
@@ -678,7 +679,7 @@ export class PulsarHidClient {
               (value, index) => index === 0 || value === request[index],
             );
             if (!validChecksum && !exactRequestEcho)
-              throw new Error("设备响应校验和不匹配，已停止操作");
+              throw new Error(t("设备响应校验和不匹配，已停止操作"));
             pendingPolls++;
             if (pendingPolls >= 30) {
               if (readRetries >= 5 || Date.now() + 100 >= deadline) break;
@@ -722,7 +723,7 @@ export class PulsarHidClient {
         await delay(this.options.pollIntervalMs ?? (recoverPending ? 10 : 20));
       }
       throw new Error(
-        `设备响应超时 (${command.category.toString(16)}:${command.register.toString(16)})。${readRetries + cachedRetries ? `已重新查询 ${readRetries + cachedRetries} 次，` : ""}未收到匹配的完成响应，请重新读取设备；持续失败时请导出诊断。`,
+        t`设备响应超时 (${command.category.toString(16)}:${command.register.toString(16)})。${readRetries + cachedRetries ? t`已重新查询 ${readRetries + cachedRetries} 次，` : ""}未收到匹配的完成响应，请重新读取设备；持续失败时请导出诊断。`,
       );
     });
     this.queue = operation.catch(() => undefined);
@@ -767,7 +768,7 @@ export class PulsarHidClient {
     return value;
   }
   async readProfile(profile = 1): Promise<ProfileSettings> {
-    integerInRange(profile, 1, PROFILE_COUNT, "Profile");
+    integerInRange(profile, 1, PROFILE_COUNT, t("配置编号"));
     const dpi = parseDpiStages(
       await this.exchange(readCommand(5, 4, 0x15, profile), "profile-read"),
     );
@@ -776,14 +777,14 @@ export class PulsarHidClient {
       (await this.exchange(readCommand(5, 1, 2, profile), "profile-read"))[7],
       1,
       dpi.dpiStages.length,
-      "Active DPI stage",
+      t("当前 DPI 档位"),
     );
     const lodReply = await this.read(7, 2, 3, profile);
     // Fusion2's selector 2 uses tenths of millimeters; older X2A enums differ.
-    if (lodReply[7] !== 2) throw new Error("设备返回了尚未支持的 LOD 编码");
+    if (lodReply[7] !== 2) throw new Error(t("设备返回了尚未支持的 LOD 编码"));
     const brightness = await this.read(3, 3, 3, profile, [1], 1),
       led = await this.read(3, 4, 15, profile, [1], 1);
-    if (led[8] > 2) throw new Error("设备返回了未知灯光模式");
+    if (led[8] > 2) throw new Error(t("设备返回了未知灯光模式"));
     for (let index = 0; index < dpi.dpiStages.length; index++) {
       const color = await this.read(5, 5, 5, profile, [index + 1], index + 1);
       dpi.dpiStages[index].color = Array.from(color.slice(8, 11)) as Rgb;
@@ -821,10 +822,10 @@ export class PulsarHidClient {
     const batteryPercent =
       battery[6] === 0xff
         ? undefined
-        : integerInRange(battery[6], 0, 100, "Battery percent");
+        : integerInRange(battery[6], 0, 100, t("电量百分比"));
     const sleep = await this.read(8, 5, 3),
       low = await this.read(8, 8, 2);
-    integerInRange(low[7], 5, 100, "Low power threshold");
+    integerInRange(low[7], 5, 100, t("低电量阈值"));
     let receiverIndicator: 1 | 2 | undefined;
     if (this.productId === 0x5403) {
       try {
@@ -844,25 +845,25 @@ export class PulsarHidClient {
   }
   async readActiveProfile(): Promise<number> {
     const reply = await this.read(2, 6, 1);
-    return integerInRange(reply[6], 1, PROFILE_COUNT, "Active profile");
+    return integerInRange(reply[6], 1, PROFILE_COUNT, t("活动配置"));
   }
   async readProfileIds(): Promise<number[]> {
     const reply = await this.read(2, 2, 0x10);
-    const count = integerInRange(reply[6], 1, PROFILE_COUNT, "Profile count");
+    const count = integerInRange(reply[6], 1, PROFILE_COUNT, t("配置数量"));
     const ids = Array.from(reply.slice(7, 7 + count));
-    ids.forEach((id) => integerInRange(id, 1, PROFILE_COUNT, "Profile ID"));
+    ids.forEach((id) => integerInRange(id, 1, PROFILE_COUNT, t("配置 ID")));
     if (new Set(ids).size !== ids.length)
-      throw new Error("设备返回了重复配置编号");
+      throw new Error(t("设备返回了重复配置编号"));
     return ids;
   }
   async setActiveProfile(profile: number): Promise<DeviceSnapshot> {
-    integerInRange(profile, 1, PROFILE_COUNT, "Profile");
+    integerInRange(profile, 1, PROFILE_COUNT, t("配置编号"));
     await this.write(2, 6, 1, profile);
     // Fusion itself waits 500 ms after the switch; globals otherwise address
     // the old active profile during the settling interval.
     await delay(500);
     if ((await this.readActiveProfile()) !== profile)
-      throw new Error("设备配置切换回读不一致");
+      throw new Error(t("设备配置切换回读不一致"));
     return this.readSnapshot(profile);
   }
   async readFirmwareVersion(): Promise<string> {
@@ -882,24 +883,24 @@ export class PulsarHidClient {
       firmwareVersion: string | undefined,
       availableProfiles: number[] | undefined;
     if (selectedProfile !== activeProfile)
-      warnings.push("正在查看存储配置；性能和电源参数属于当前激活配置");
+      warnings.push(t("正在查看存储配置；性能和电源参数属于当前激活配置"));
     try {
       power = await this.readPower();
     } catch {
-      warnings.push("设备电池 / 电源信息尚不可用");
+      warnings.push(t("设备电池 / 电源信息尚不可用"));
     }
     try {
       firmwareVersion = await this.readFirmwareVersion();
     } catch {
-      warnings.push("固件版本读取失败");
+      warnings.push(t("固件版本读取失败"));
     }
     try {
       availableProfiles = await this.readProfileIds();
     } catch {
-      warnings.push("设备配置列表读取失败");
+      warnings.push(t("设备配置列表读取失败"));
     }
     if ((await this.readActiveProfile()) !== activeProfile)
-      throw new Error("设备活动配置在读取期间发生变化，请重新读取");
+      throw new Error(t("设备活动配置在读取期间发生变化，请重新读取"));
     return {
       global,
       profile: settings,
@@ -917,11 +918,11 @@ export class PulsarHidClient {
   ): Promise<GlobalSettings> {
     validateGlobal(next);
     validateGlobal(previous);
-    integerInRange(profile, 0, PROFILE_COUNT, "Profile");
+    integerInRange(profile, 0, PROFILE_COUNT, t("配置编号"));
     if (profile && (await this.readActiveProfile()) !== profile)
-      throw new Error("活动配置已经变化，请重新读取后再应用");
+      throw new Error(t("活动配置已经变化，请重新读取后再应用"));
     if (next.pollingRate > this.maxPollingRate)
-      throw new Error("当前连接最高支持 1000 Hz；更高轮询率需要 8K 接收器");
+      throw new Error(t("当前连接最高支持 1000 Hz；更高轮询率需要 8K 接收器"));
     if (next.pollingRate !== previous.pollingRate)
       await this.write(1, 9, 2, profile, [next.pollingRate / 125]);
     if (next.debounce !== previous.debounce)
@@ -941,9 +942,9 @@ export class PulsarHidClient {
       "motionSync",
     ] as const)
       if (actual[key] !== next[key])
-        throw new Error(`设置 ${key} 的设备回读不一致，请重新读取设备`);
+        throw new Error(t`设置 ${key} 的设备回读不一致，请重新读取设备`);
     if (profile && (await this.readActiveProfile()) !== profile)
-      throw new Error("活动配置在写入期间发生变化，请重新读取");
+      throw new Error(t("活动配置在写入期间发生变化，请重新读取"));
     return actual;
   }
   async writeProfile(
@@ -953,7 +954,7 @@ export class PulsarHidClient {
     validateProfile(next);
     validateProfile(previous);
     if (next.profile !== previous.profile)
-      throw new Error("请先读取目标配置再写入");
+      throw new Error(t("请先读取目标配置再写入"));
     const profile = next.profile;
     const changedMacroBindings = BUTTON_IDS.map((button) => ({
       button,
@@ -969,7 +970,7 @@ export class PulsarHidClient {
       );
       for (const { binding } of changedMacroBindings)
         if (!available.has(binding.a1 | (binding.a2 << 8)))
-          throw new Error("按键引用的宏不存在于当前设备，请先上传对应宏");
+          throw new Error(t("按键引用的宏不存在于当前设备，请先上传对应宏"));
     }
     if (
       next.activeStage !== previous.activeStage ||
@@ -1029,7 +1030,7 @@ export class PulsarHidClient {
     }
     const actual = await this.readProfile(profile);
     if (!same(actual, next))
-      throw new Error("配置写入后的设备回读不一致，请重新读取设备检查实际值");
+      throw new Error(t("配置写入后的设备回读不一致，请重新读取设备检查实际值"));
     return actual;
   }
   async writeSettings(
@@ -1042,20 +1043,20 @@ export class PulsarHidClient {
     validateGlobal(previous.global);
     validateProfile(previous.profile);
     if (next.profile.profile !== previous.profile.profile)
-      throw new Error("请先读取目标配置再写入");
+      throw new Error(t("请先读取目标配置再写入"));
     if (next.power?.sleepSeconds !== undefined)
-      integerInRange(next.power.sleepSeconds, 30, 900, "Sleep seconds");
+      integerInRange(next.power.sleepSeconds, 30, 900, t("休眠秒数"));
     if (next.power?.lowPowerPercent !== undefined)
-      integerInRange(next.power.lowPowerPercent, 5, 100, "Low power threshold");
+      integerInRange(next.power.lowPowerPercent, 5, 100, t("低电量阈值"));
     if (next.power?.receiverIndicator !== undefined) {
-      integerInRange(next.power.receiverIndicator, 1, 2, "Receiver indicator");
+      integerInRange(next.power.receiverIndicator, 1, 2, t("接收器指示灯"));
       if (this.productId !== 0x5403)
-        throw new Error("接收器灯光设置需要 8K 接收器");
+        throw new Error(t("接收器灯光设置需要 8K 接收器"));
     }
     if (next.global.pollingRate > this.maxPollingRate)
-      throw new Error("当前连接最高支持 1000 Hz；更高轮询率需要 8K 接收器");
+      throw new Error(t("当前连接最高支持 1000 Hz；更高轮询率需要 8K 接收器"));
     if ((await this.readActiveProfile()) !== next.profile.profile)
-      throw new Error("请先切换到目标设备配置，再应用性能和电源设置");
+      throw new Error(t("请先切换到目标设备配置，再应用性能和电源设置"));
     await this.writeProfile(next.profile, previous.profile);
     await this.writeGlobalSettings(
       next.global,
@@ -1085,7 +1086,7 @@ export class PulsarHidClient {
       await this.writePower(powerChanges, next.profile.profile);
     const final = await this.readSnapshot(next.profile.profile);
     if (final.activeProfile !== next.profile.profile)
-      throw new Error("活动配置在写入期间发生变化，请重新读取");
+      throw new Error(t("活动配置在写入期间发生变化，请重新读取"));
     return final;
   }
   async writePower(
@@ -1095,21 +1096,21 @@ export class PulsarHidClient {
     >,
     profile = 0,
   ): Promise<PowerStatus> {
-    integerInRange(profile, 0, PROFILE_COUNT, "Profile");
+    integerInRange(profile, 0, PROFILE_COUNT, t("配置编号"));
     if (next.sleepSeconds !== undefined)
-      integerInRange(next.sleepSeconds, 30, 900, "Sleep seconds");
+      integerInRange(next.sleepSeconds, 30, 900, t("休眠秒数"));
     if (next.lowPowerPercent !== undefined)
-      integerInRange(next.lowPowerPercent, 5, 100, "Low power threshold");
+      integerInRange(next.lowPowerPercent, 5, 100, t("低电量阈值"));
     if (next.receiverIndicator !== undefined) {
-      integerInRange(next.receiverIndicator, 1, 2, "Receiver indicator");
+      integerInRange(next.receiverIndicator, 1, 2, t("接收器指示灯"));
       if (this.productId !== 0x5403)
-        throw new Error("接收器灯光设置需要 8K 接收器");
+        throw new Error(t("接收器灯光设置需要 8K 接收器"));
     }
     const device = this.device,
       epoch = this.epoch;
     const assertSession = () => {
       if (!device?.opened || this.device !== device || this.epoch !== epoch)
-        throw new Error("电源设置期间设备连接已变化，请重新读取设备");
+        throw new Error(t("电源设置期间设备连接已变化，请重新读取设备"));
     };
     const inSession = async <T>(operation: () => Promise<T>): Promise<T> => {
       assertSession();
@@ -1121,7 +1122,7 @@ export class PulsarHidClient {
       profile &&
       (await inSession(() => this.readActiveProfile())) !== profile
     )
-      throw new Error("活动配置已经变化，请重新读取后再应用");
+      throw new Error(t("活动配置已经变化，请重新读取后再应用"));
     if (next.sleepSeconds !== undefined)
       await inSession(() =>
         this.write(8, 5, 3, profile, [
@@ -1158,23 +1159,23 @@ export class PulsarHidClient {
       (next.receiverIndicator !== undefined &&
         actual.receiverIndicator !== next.receiverIndicator)
     )
-      throw new Error("电源设置回读不一致，请重新读取设备");
+      throw new Error(t("电源设置回读不一致，请重新读取设备"));
     if (
       profile &&
       (await inSession(() => this.readActiveProfile())) !== profile
     )
-      throw new Error("活动配置在写入期间发生变化，请重新读取");
+      throw new Error(t("活动配置在写入期间发生变化，请重新读取"));
     return actual;
   }
   async readReceiverIndicator(): Promise<1 | 2> {
     if (this.productId !== 0x5403)
-      throw new Error("接收器灯光设置需要 8K 接收器");
+      throw new Error(t("接收器灯光设置需要 8K 接收器"));
     // Seed the known header when this API is called outside readPower.
     integerInRange(
       (await this.read(8, 8, 2))[7],
       5,
       100,
-      "Low power threshold",
+      t("低电量阈值"),
     );
     return this.readIndicatorAfterLowPower();
   }
@@ -1183,10 +1184,10 @@ export class PulsarHidClient {
       readCommand(8, 9, 2),
       "indicator-low-power",
     );
-    return integerInRange(reply[7], 1, 2, "Receiver indicator") as 1 | 2;
+    return integerInRange(reply[7], 1, 2, t("接收器指示灯")) as 1 | 2;
   }
   async resetProfile(profile: number): Promise<DeviceSnapshot> {
-    integerInRange(profile, 1, PROFILE_COUNT, "Profile");
+    integerInRange(profile, 1, PROFILE_COUNT, t("配置编号"));
     await this.write(2, 5, 1, profile);
     await delay(500);
     return this.setActiveProfile(profile);
@@ -1197,7 +1198,7 @@ export class PulsarHidClient {
     const operation = this.queue.then(async () => {
       const device = this.device;
       if (epoch !== this.epoch || !device?.opened)
-        throw new Error("请先连接鼠标");
+        throw new Error(t("请先连接鼠标"));
       const packet = buildCommand({
         category: 1,
         register: 12,
@@ -1229,7 +1230,7 @@ export class PulsarHidClient {
     });
   }
   private macroIdBytes(id: number): number[] {
-    integerInRange(id, 1, 65535, "Macro ID");
+    integerInRange(id, 1, 65535, t("宏 ID"));
     return [id & 255, id >> 8];
   }
   private u32(value: number): number[] {
@@ -1253,7 +1254,7 @@ export class PulsarHidClient {
   async listMacros(): Promise<DeviceMacroSummary[]> {
     const count = await this.readMacroCount();
     if (!count) return [];
-    if (count > 128) throw new Error("设备宏数量超过当前实现的安全上限");
+    if (count > 128) throw new Error(t("设备宏数量超过当前实现的安全上限"));
     const ids: number[] = [];
     for (let offset = 0; ids.length < count && offset < 26 * 8; offset += 26) {
       // List requests use the body as total count + entry offset, not profile.
@@ -1267,21 +1268,21 @@ export class PulsarHidClient {
       });
       const total = reply[6] | (reply[7] << 8);
       if (total !== count)
-        throw new Error("设备宏列表在读取期间发生变化，请重试");
+        throw new Error(t("设备宏列表在读取期间发生变化，请重试"));
       const previouslyCollected = ids.length;
       // Native Fusion scans the whole slot area and skips zero words. The
       // observed v4 reply has an empty word at 10 before its first ID at 12.
       for (let index = 0; index < 26 && ids.length < count; index++) {
         const id = reply[10 + index * 2] | (reply[11 + index * 2] << 8);
         if (!id) continue;
-        if (ids.includes(id)) throw new Error("设备宏列表包含重复编号");
+        if (ids.includes(id)) throw new Error(t("设备宏列表包含重复编号"));
         ids.push(id);
       }
       if (ids.length === previouslyCollected)
-        throw new Error("设备宏列表分页没有返回新条目，请重新读取");
+        throw new Error(t("设备宏列表分页没有返回新条目，请重新读取"));
     }
     if (ids.length !== count)
-      throw new Error("设备宏列表未完整返回，请重新读取");
+      throw new Error(t("设备宏列表未完整返回，请重新读取"));
     const result: DeviceMacroSummary[] = [];
     for (const id of ids)
       result.push({
@@ -1295,7 +1296,7 @@ export class PulsarHidClient {
     const idBytes = this.macroIdBytes(id);
     const reply = await this.macroCommand(0x83, 6, idBytes, { 7: idBytes[1] });
     const size = this.getU32(reply, 8);
-    if (size > 4096) throw new Error("设备宏大小超过 4096 字节");
+    if (size > 4096) throw new Error(t("设备宏大小超过 4096 字节"));
     return size;
   }
   async readMacroName(id: number): Promise<string> {
@@ -1304,7 +1305,7 @@ export class PulsarHidClient {
       7: idBytes[1],
     });
     const length = first[10] | (first[11] << 8);
-    if (length > 4096 || length % 2) throw new Error("设备宏名称长度无效");
+    if (length > 4096 || length % 2) throw new Error(t("设备宏名称长度无效"));
     const bytes = new Uint8Array(length);
     for (let offset = 0; offset < length; offset += 50) {
       const reply = await this.macroCommand(
@@ -1348,9 +1349,9 @@ export class PulsarHidClient {
   }): Promise<DeviceMacro> {
     const idBytes = this.macroIdBytes(macro.id);
     if (!macro.name.trim() || macro.name.length > 25)
-      throw new Error("宏名称须为 1–25 个 UTF-16 字符");
-    integerInRange(macro.data.length, 1, 4096, "Macro data length");
-    macro.data.forEach((value) => integerInRange(value, 0, 255, "Macro byte"));
+      throw new Error(t("宏名称须为 1–25 个 UTF-16 字符"));
+    integerInRange(macro.data.length, 1, 4096, t("宏数据长度"));
+    macro.data.forEach((value) => integerInRange(value, 0, 255, t("宏字节")));
     // Allocation reserves the exact data length. Never allocate or delete any
     // other macro while saving this explicit ID.
     await this.macroCommand(
@@ -1388,13 +1389,13 @@ export class PulsarHidClient {
     );
     const actual = await this.readMacro(macro.id);
     if (actual.name !== macro.name || !same(actual.data, macro.data))
-      throw new Error("宏写入回读不一致，请重新读取设备宏");
+      throw new Error(t("宏写入回读不一致，请重新读取设备宏"));
     return actual;
   }
   async deleteMacro(id: number): Promise<void> {
     const idBytes = this.macroIdBytes(id);
     await this.macroCommand(4, 2, idBytes, { 7: idBytes[1] });
     if ((await this.listMacros()).some((macro) => macro.id === id))
-      throw new Error("宏删除回读不一致");
+      throw new Error(t("宏删除回读不一致"));
   }
 }
