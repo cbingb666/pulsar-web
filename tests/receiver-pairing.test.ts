@@ -47,7 +47,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-function receiver() {
+function receiver(productId = 0x5403) {
   const inputEvents = new EventTarget();
   const hidEvents = new EventTarget();
   const reports: { reportId: number; bytes: Uint8Array }[] = [];
@@ -60,8 +60,8 @@ function receiver() {
   let filters: Parameters<HidApi["requestDevice"]>[0]["filters"] | undefined;
   const device: HidDevice = {
     vendorId: 0x3710,
-    productId: 0x5403,
-    productName: "Pulsar 8K Dongle",
+    productId,
+    productName: productId === 0x5402 ? "Pulsar 1K Dongle" : "Pulsar 8K Dongle",
     opened: false,
     collections: [pairingCollection()],
     async open() {
@@ -155,11 +155,14 @@ test("pairing start fixture is exactly 64 native payload bytes without a checksu
   assert.deepEqual(buildPairingReport(), START_PACKET);
 });
 
-test("picker requests only the original 3710:5403 receiver without an invented usage filter", async (context) => {
+test("picker requests only the original 1K/8K receivers without an invented usage filter", async (context) => {
   await withMockClock(context, async () => {
     const fake = receiver();
     assert.deepEqual(await requestPairingDevices(fake.hid), [fake.device]);
-    assert.deepEqual(fake.filters(), [{ vendorId: 0x3710, productId: 0x5403 }]);
+    assert.deepEqual(fake.filters(), [
+      { vendorId: 0x3710, productId: 0x5402 },
+      { vendorId: 0x3710, productId: 0x5403 },
+    ]);
     assert.equal(fake.calls.request, 1);
     assert.equal(fake.calls.open, 0);
     assert.deepEqual(fake.reports, []);
@@ -210,9 +213,9 @@ const invalidDescriptors: {
     },
   },
   {
-    name: "a 1K receiver",
+    name: "a wired mouse",
     change: (d) => {
-      d.productId = 0x5402;
+      d.productId = 0x3401;
     },
   },
   {
@@ -314,7 +317,7 @@ test("selection ignores unrelated devices but refuses two matching interfaces wi
     const first = receiver();
     const second = receiver();
     const unrelated = receiver();
-    unrelated.device.productId = 0x5402;
+    unrelated.device.productId = 0x3401;
     assert.equal(
       selectPairingInterface([unrelated.device, first.device]),
       first.device,
@@ -328,35 +331,37 @@ test("selection ignores unrelated devices but refuses two matching interfaces wi
   });
 });
 
-for (const [status, expected] of [
-  [2, "already-paired"],
-  [3, "paired"],
-] as const) {
-  test(`input status ${status} settles as ${expected}, even before sendReport completes`, async (context) => {
-    await withMockClock(context, async () => {
-      const fake = receiver();
-      const controller = new AbortController();
-      const logs: PairingLog[] = [];
-      fake.operations.send = async () => {
-        fake.input(status, 0, 64, 5);
-      };
-      assert.equal(
-        await pair(fake, {
-          signal: controller.signal,
-          onLog: (entry) => logs.push(entry),
-        }),
-        expected,
-      );
-      assert.deepEqual(fake.reports, [{ reportId: 0, bytes: START_PACKET }]);
-      assert.deepEqual(
-        logs.map((entry) => entry.direction),
-        ["out", "in"],
-      );
-      assert.deepEqual(logs[0].bytes, Array.from(START_PACKET));
-      assert.equal(logs[1].bytes[6], status);
-      fake.assertClean(controller.signal);
+for (const productId of [0x5402, 0x5403]) {
+  for (const [status, expected] of [
+    [2, "already-paired"],
+    [3, "paired"],
+  ] as const) {
+    test(`${productId.toString(16)} input status ${status} settles as ${expected}, even before sendReport completes`, async (context) => {
+      await withMockClock(context, async () => {
+        const fake = receiver(productId);
+        const controller = new AbortController();
+        const logs: PairingLog[] = [];
+        fake.operations.send = async () => {
+          fake.input(status, 0, 64, 5);
+        };
+        assert.equal(
+          await pair(fake, {
+            signal: controller.signal,
+            onLog: (entry) => logs.push(entry),
+          }),
+          expected,
+        );
+        assert.deepEqual(fake.reports, [{ reportId: 0, bytes: START_PACKET }]);
+        assert.deepEqual(
+          logs.map((entry) => entry.direction),
+          ["out", "in"],
+        );
+        assert.deepEqual(logs[0].bytes, Array.from(START_PACKET));
+        assert.equal(logs[1].bytes[6], status);
+        fake.assertClean(controller.signal);
+      });
     });
-  });
+  }
 }
 
 test("pending and unknown statuses wait for success without polling or resending start", async (context) => {
@@ -616,7 +621,7 @@ test("disconnect interrupts a hung send and preserves the disconnect error", asy
     const sending = deferred();
     fake.operations.send = () => sending.promise;
     const result = pair(fake, { signal: controller.signal, ioTimeoutMs: 30 });
-    const rejected = assert.rejects(result, /8K 接收器已拔出，配对结果未确认/);
+    const rejected = assert.rejects(result, /接收器已拔出，配对结果未确认/);
     await setImmediate();
     assert.equal(fake.reports.length, 1);
     fake.disconnect();

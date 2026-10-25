@@ -938,11 +938,12 @@ export default function App() {
     pairingAbort.current = controller;
     pairingDiagnostics.current = { devices: [], logs: [], probes: [] };
     setPairingResult(null);
-    setPairingProgress("请在浏览器选择 8K 接收器并授权…");
+    setPairingProgress("请在浏览器选择 1K 或 8K 接收器并授权…");
     await run(
-      "配对 8K 接收器",
+      "配对接收器",
       async () => {
         let receiverResult: PairingResult | undefined;
+        let receiverName = "1K Dongle 或 8K Dongle";
         try {
           // Keep the browser picker within this explicit click's user activation.
           const devices = await requestPairingDevices();
@@ -963,6 +964,8 @@ export default function App() {
             signal: controller.signal,
             onSelected: (device) => {
               pairingDevice = device;
+              receiverName =
+                device.productId === 0x5402 ? "1K Dongle" : "8K Dongle";
             },
             onProbe: (probe) => pairingDiagnostics.current.probes.push(probe),
             onProgress: setPairingProgress,
@@ -980,7 +983,12 @@ export default function App() {
           // Only use interfaces from the user's selected receiver, never a different
           // previously granted dongle. The pairing interface is not a settings route.
           await c.connectDevices(
-            devices.filter((device) => device !== pairingDevice),
+            devices.filter(
+              (device) =>
+                device !== pairingDevice &&
+                device.vendorId === pairingDevice?.vendorId &&
+                device.productId === pairingDevice?.productId,
+            ),
           );
           if (controller.signal.aborted)
             throw new Error("已停止配对后的连接检查，请重新连接鼠标");
@@ -1001,7 +1009,11 @@ export default function App() {
           if (controller.signal.aborted || clientRef.current !== c)
             throw new Error("已停止配对后的连接检查，请重新连接鼠标");
           const preferenceSaved = saveAutoConnect(true);
-          const text = `${receiverResult === "already-paired" ? "接收器已有配对" : "配对成功"}，已确认 Xlite v4 并读取配置。现在可以选择 2000 / 4000 / 8000 Hz；本地草稿已保留。${macroWarning}${preferenceSaved ? "" : "自动连接偏好未能保存。"}`;
+          const pollingHint =
+            c.maxPollingRate === 8000
+              ? "现在可以选择 2000 / 4000 / 8000 Hz"
+              : "1K 接收器最高支持 1000 Hz";
+          const text = `${receiverResult === "already-paired" ? "接收器已有配对" : "配对成功"}，已确认 Xlite v4 并读取配置。${pollingHint}；本地草稿已保留。${macroWarning}${preferenceSaved ? "" : "自动连接偏好未能保存。"}`;
           pairingDiagnostics.current.result = text;
           setPairingResult({ text });
           setNotice({ text });
@@ -1009,7 +1021,7 @@ export default function App() {
           if (clientRef.current !== c) return;
           const detail = error instanceof Error ? error.message : String(error);
           const text = receiverResult
-            ? `接收器报告${receiverResult === "already-paired" ? "已有配对" : "配对完成"}，但尚未完成配置连接。请关闭此窗口后点击“连接鼠标”，选择 8K Dongle 重新校验。${detail}`
+            ? `接收器报告${receiverResult === "already-paired" ? "已有配对" : "配对完成"}，但尚未完成配置连接。请关闭此窗口后点击“连接鼠标”，选择 ${receiverName} 重新校验。${detail}`
             : detail;
           pairingDiagnostics.current.result = text;
           setPairingResult({ text, error: true });
@@ -1317,7 +1329,7 @@ export default function App() {
               }}
             >
               <Link2 size={15} />
-              配对 8K 接收器
+              配对接收器
             </button>
             <span className={`connection-label ${connected ? "online" : ""}`}>
               <span />
@@ -2512,6 +2524,10 @@ export default function App() {
                       <b>源程序协议已恢复</b>
                     </div>
                     <div className="capability-row">
+                      <span>1K 接收器配对</span>
+                      <b className="positive">已实机验证</b>
+                    </div>
+                    <div className="capability-row">
                       <span>8K 接收器配对与配置读取</span>
                       <b className="positive">已实机验证</b>
                     </div>
@@ -2860,7 +2876,7 @@ export default function App() {
                 Dongle”，8K 接收器选择“8K Dongle”，允许访问。
               </li>
               <li>
-                8K 接收器尚未配对时，先点击顶部“配对 8K 接收器”按提示操作。
+                1K 或 8K 接收器尚未配对时，先点击顶部“配对接收器”按提示操作。
               </li>
               <li>性能调整即时生效；DPI 数值完成输入、消抖滑块松开后保存。</li>
               <li>

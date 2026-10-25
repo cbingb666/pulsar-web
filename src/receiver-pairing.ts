@@ -6,9 +6,9 @@ import {
 } from "./hid";
 import { VENDOR_ID, checksum } from "./protocol";
 
-// Official Pairing Tool V0.11 / V0.12, not the Sonix settings envelope.
-// Evidence and the descriptor assumptions awaiting hardware: docs/receiver-pairing-evidence.md.
-export const PAIRING_PRODUCT_ID = 0x5403;
+// Official Xlite v4 / V0.11 / V0.12 pairing tools, not the Sonix settings envelope.
+// Protocol and per-receiver passive routing evidence: docs/receiver-pairing-evidence.md.
+export const PAIRING_PRODUCT_IDS = [0x5402, 0x5403] as const;
 export const PAIRING_TIMEOUT_MS = 30_000;
 export type PairingResult = "paired" | "already-paired";
 export interface PairingLog {
@@ -30,7 +30,7 @@ export interface PairingOptions {
 export interface PairingProbe {
   candidate: number;
   reads: {
-    kind: "settings" | "unavailable" | "unknown";
+    kind: "settings" | "short-zero" | "unavailable" | "unknown";
     byteLength?: number;
     bytes?: number[];
     errorName?: string;
@@ -69,7 +69,7 @@ function pairingCandidates(devices: HidDevice[]): HidDevice[] {
   return [...new Set(devices)].filter(
     (device) =>
       device.vendorId === VENDOR_ID &&
-      device.productId === PAIRING_PRODUCT_ID &&
+      (PAIRING_PRODUCT_IDS as readonly number[]).includes(device.productId) &&
       hasPairingReports(device.collections),
   );
 }
@@ -79,8 +79,8 @@ export function selectPairingInterface(devices: HidDevice[]): HidDevice {
   if (candidates.length !== 1)
     throw new Error(
       candidates.length > 1
-        ? "浏览器返回了多个无法区分的 8K 配对通道，尚未发送命令。一个接收器也可能提供相同接口；请只保留目标接收器，若仍失败，请导出诊断以完成接口适配。"
-        : "未找到兼容的 8K 配对通道（64 字节输入 / 输出报告 0）。请确认选择的是 8K Dongle；可导出诊断以核对接口。",
+        ? "浏览器返回了多个无法区分的配对通道，尚未发送命令。一个接收器也可能提供相同接口；请只保留目标接收器，若仍失败，请导出诊断以完成接口适配。"
+        : "未找到兼容的配对通道（64 字节输入 / 输出报告 0）。请选择原版 1K Dongle 或 8K Dongle；可导出诊断以核对接口。",
     );
   const device = candidates[0];
   if (
@@ -138,16 +138,30 @@ async function routingIo<T>(
   }
 }
 
-function isSettingsReport(view: DataView): boolean {
+function passiveReportKind(
+  view: DataView,
+  productId: number,
+): PairingProbe["reads"][number]["kind"] {
   const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+  // Captured 5402 MI02 returns exactly one zero payload byte. Do not treat an
+  // arbitrary short read (or a failed GET as on 5403) as the 1K pairing route.
+  if (productId === 0x5402 && bytes.length === 1 && bytes[0] === 0)
+    return "short-zero";
   const packet =
     bytes.length === 65 && bytes[0] === 0 ? bytes.subarray(1) : bytes;
-  // A zero-filled buffer proves only its size, never a settings protocol reply.
-  return (
+  // Captured 5402 MI03 can initially be all zero. With the complementary
+  // repeated short-zero route this identifies only the channel, not a mouse.
+  if (
+    productId === 0x5402 &&
     packet.length === 64 &&
+    packet.every((byte) => byte === 0)
+  )
+    return "settings";
+  return packet.length === 64 &&
     [1, 2, 4, 5].includes(packet[0]) &&
     checksum(packet) === (packet[62] | (packet[63] << 8))
-  );
+    ? "settings"
+    : "unknown";
 }
 
 async function probePairingInterface(
@@ -176,7 +190,7 @@ async function probePairingInterface(
           options,
         );
         probe.reads.push({
-          kind: isSettingsReport(view) ? "settings" : "unknown",
+          kind: passiveReportKind(view, device.productId),
           byteLength: view.byteLength,
           bytes: Array.from(
             new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
@@ -221,9 +235,9 @@ async function probePairingInterface(
   }
 }
 
-/** Distinguish the captured 5403 MI02/MI03 pair without output or SET_FEATURE.
- * Repeated failed GETs alone are insufficient: the sibling must positively
- * return valid settings reports on both reads, with neither probe incomplete.
+/** Distinguish the captured 5402/5403 MI02/MI03 pairs without writes.
+ * Require both complete interfaces of one receiver type and complementary,
+ * repeated passive evidence. Candidate ordering never identifies an interface.
  */
 export async function resolvePairingInterface(
   devices: HidDevice[],
@@ -235,13 +249,14 @@ export async function resolvePairingInterface(
   if (candidates.length === 0) return selectPairingInterface(candidates);
   if (
     candidates.length !== 2 ||
+    candidates[0].productId !== candidates[1].productId ||
     candidates.some((device) => !hasFeatureZero(device.collections, true))
   )
     throw new Error(
-      "无法确认 8K 配对通道：需要同一接收器的两个完整接口。请只保留目标接收器并重新选择；仍失败时请导出诊断。",
+      "无法确认配对通道：需要同一接收器的两个完整接口。请只保留目标 1K 或 8K 接收器并重新选择；仍失败时请导出诊断。",
     );
   candidates.forEach((device) => selectPairingInterface([device]));
-  options.onProgress?.("正在只读检查 8K 接收器的配对和配置通道…");
+  options.onProgress?.("正在只读检查接收器的配对和配置通道…");
   const probes: PairingProbe[] = [];
   for (const [index, device] of candidates.entries()) {
     if (options.signal?.aborted) throw routingCancelled();
@@ -255,23 +270,28 @@ export async function resolvePairingInterface(
     !probe.error &&
     probe.reads.length === 2 &&
     probe.reads.every((read) => read.kind === kind);
-  const pairing = probes.findIndex((probe) => role(probe, "unavailable"));
+  const pairingKind =
+    candidates[0].productId === 0x5402 ? "short-zero" : "unavailable";
+  const pairing = probes.findIndex((probe) => role(probe, pairingKind));
   if (pairing !== -1 && role(probes[1 - pairing], "settings"))
     return candidates[pairing];
   throw new Error(
-    "8K 接口只读检查结果不足以确认配对通道，尚未发送配对命令。请重新插拔接收器，或导出诊断以核对接口。",
+    "接口只读检查结果不足以确认配对通道，尚未发送配对命令。请重新插拔接收器，或导出诊断以核对接口。",
   );
 }
 
-/** Call directly from a user gesture. Never requests mouse/1K/Gen.2 permissions. */
+/** Call directly from a user gesture. Only original 1K/8K receiver permissions. */
 export async function requestPairingDevices(
   hid = getHidApi(),
 ): Promise<HidDevice[]> {
   if (!hid) throw new Error("配对需要桌面版 Chrome / Edge 的 WebHID 支持");
   const devices = await hid.requestDevice({
-    filters: [{ vendorId: VENDOR_ID, productId: PAIRING_PRODUCT_ID }],
+    filters: PAIRING_PRODUCT_IDS.map((productId) => ({
+      vendorId: VENDOR_ID,
+      productId,
+    })),
   });
-  if (!devices.length) throw new Error("未选择 8K 接收器，配对未开始");
+  if (!devices.length) throw new Error("未选择接收器，配对未开始");
   return devices;
 }
 
@@ -343,7 +363,7 @@ export async function pairReceiver(
     });
   try {
     checkCancelled();
-    options.onProgress?.("正在打开 8K 接收器的配对通道…");
+    options.onProgress?.("正在打开接收器的配对通道…");
     if (!device.opened) {
       const opening = device.open();
       // WebHID open itself cannot be aborted. Close a late completion as well.
@@ -380,7 +400,7 @@ export async function pairReceiver(
       }) as EventListener;
       disconnectListener = ((event: Event & { device?: HidDevice }) => {
         if (event.device === device)
-          reject(new Error("8K 接收器已拔出，配对结果未确认"));
+          reject(new Error("接收器已拔出，配对结果未确认"));
       }) as EventListener;
       abortListener = () => reject(cancelled());
       device.addEventListener!("inputreport", inputListener);

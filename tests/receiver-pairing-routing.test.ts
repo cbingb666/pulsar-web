@@ -8,6 +8,8 @@ import { buildPairingReport, pairReceiver } from "../src/receiver-pairing";
 // Passive capture: .local/8k-passive-20261018T045508Z.json. One 3710:5403
 // exposes MI02 and MI03 with identical descriptors. MI02 GET_FEATURE(0)
 // rejects; MI03 returns this 64-byte settings reply (native report ID removed).
+// The 1K capture .local/receiver-routing-20261015T202350Z.json has the same
+// descriptors; its MI02 passive read returns only one zero byte.
 // The pairing status below is source-derived, not a captured hardware pairing.
 const SETTINGS_REPLY = Uint8Array.from([
   0x05,
@@ -33,6 +35,7 @@ function collection(): HidCollection {
 function channel(
   kind: "pairing" | "settings",
   transportErrorName = "NotAllowedError",
+  productId = 0x5403,
 ) {
   const events = new EventTarget();
   const calls = { open: 0, close: 0, receive: 0, featureSend: 0 };
@@ -41,6 +44,8 @@ function channel(
     open: async () => {},
     receive: async (): Promise<DataView> => {
       if (kind === "pairing") {
+        if (productId === 0x5402)
+          return new DataView(Uint8Array.of(0).buffer);
         // Current Chromium maps a failed native GET_FEATURE to NotAllowedError;
         // WebHID specifies NetworkError. The exact transport message matters.
         throw new DOMException(
@@ -54,8 +59,8 @@ function channel(
   };
   const device: HidDevice = {
     vendorId: 0x3710,
-    productId: 0x5403,
-    productName: "8K Dongle",
+    productId,
+    productName: productId === 0x5402 ? "1K Dongle" : "8K Dongle",
     opened: false,
     collections: [collection()],
     async open() {
@@ -162,6 +167,36 @@ for (const transportErrorName of ["NotAllowedError", "NetworkError"]) {
   }
 }
 
+for (const order of ["pairing-first", "settings-first"] as const) {
+  for (const reply of ["settings", "initial-zero"] as const) {
+    test(`one 1K receiver routes its short pairing interface (${reply}, ${order})`, async () => {
+      const pairing = channel("pairing", "NotAllowedError", 0x5402);
+      const settings = channel("settings", "NotAllowedError", 0x5402);
+      if (reply === "initial-zero")
+        settings.operations.receive = async () =>
+          new DataView(new Uint8Array(64).buffer);
+      const devices =
+        order === "pairing-first"
+          ? [pairing.device, settings.device]
+          : [settings.device, pairing.device];
+      pairing.operations.beforeSend = () => {
+        assert.equal(pairing.calls.receive, 2);
+        assert.equal(settings.calls.receive, 2);
+      };
+      assert.equal(
+        await pairReceiver(devices, { timeoutMs: 100, ioTimeoutMs: 50 }),
+        "paired",
+      );
+      assert.deepEqual(pairing.reports, [
+        { reportId: 0, bytes: buildPairingReport() },
+      ]);
+      assert.deepEqual(settings.reports, []);
+      pairing.assertClosed();
+      settings.assertClosed();
+    });
+  }
+}
+
 for (const framing of ["report-id-prefixed", "nonzero-offset"] as const) {
   test(`passive routing recognizes a ${framing} settings DataView`, async () => {
     const pairing = channel("pairing");
@@ -192,8 +227,42 @@ for (const framing of ["report-id-prefixed", "nonzero-offset"] as const) {
   });
 }
 
+for (const framing of ["report-id-prefixed", "nonzero-offset"] as const) {
+  test(`1K initial zero settings evidence respects ${framing} framing`, async () => {
+    const pairing = channel("pairing", "NotAllowedError", 0x5402);
+    const settings = channel("settings", "NotAllowedError", 0x5402);
+    if (framing === "nonzero-offset") {
+      pairing.operations.receive = async () => {
+        const bytes = Uint8Array.of(0xff, 0, 0xff);
+        return new DataView(bytes.buffer, 1, 1);
+      };
+    }
+    settings.operations.receive = async () => {
+      if (framing === "report-id-prefixed")
+        return new DataView(new Uint8Array(65).buffer);
+      const bytes = new Uint8Array(72).fill(0xff);
+      bytes.fill(0, 4, 68);
+      return new DataView(bytes.buffer, 4, 64);
+    };
+    assert.equal(
+      await pairReceiver([settings.device, pairing.device], {
+        timeoutMs: 100,
+        ioTimeoutMs: 50,
+      }),
+      "paired",
+    );
+    assert.deepEqual(pairing.reports, [
+      { reportId: 0, bytes: buildPairingReport() },
+    ]);
+    assert.deepEqual(settings.reports, []);
+    pairing.assertClosed();
+    settings.assertClosed();
+  });
+}
+
 const refusals: {
   name: string;
+  productIds?: number[];
   configure: (
     pairing: ReturnType<typeof channel>,
     settings: ReturnType<typeof channel>,
@@ -256,6 +325,7 @@ const refusals: {
   },
   {
     name: "an all-zero settings reply despite its valid checksum",
+    productIds: [0x5403],
     configure(_pairing, settings) {
       settings.operations.receive = async () =>
         new DataView(new Uint8Array(64).buffer);
@@ -268,6 +338,17 @@ const refusals: {
         const bytes = SETTINGS_REPLY.slice();
         bytes[0] = 3;
         bytes[62] = 3;
+        return new DataView(bytes.buffer);
+      };
+    },
+  },
+  {
+    name: "a nonzero settings body with a zero status",
+    configure(_pairing, settings) {
+      settings.operations.receive = async () => {
+        const bytes = new Uint8Array(64);
+        bytes[6] = 1;
+        bytes[62] = 1;
         return new DataView(bytes.buffer);
       };
     },
@@ -313,11 +394,31 @@ const refusals: {
   },
 ];
 
-for (const { name, configure } of refusals) {
-  test(`passive routing refuses ${name} without any pairing output`, async () => {
-    const pairing = channel("pairing");
-    const settings = channel("settings");
-    configure(pairing, settings);
+for (const { name, configure, productIds = [0x5402, 0x5403] } of refusals) {
+  for (const productId of productIds) {
+    test(`${productId.toString(16)} passive routing refuses ${name} without any pairing output`, async () => {
+      const pairing = channel("pairing", "NotAllowedError", productId);
+      const settings = channel("settings", "NotAllowedError", productId);
+      configure(pairing, settings);
+      await assert.rejects(
+        pairReceiver([pairing.device, settings.device], {
+          timeoutMs: 100,
+          ioTimeoutMs: 10,
+        }),
+      );
+      assert.deepEqual([...pairing.reports, ...settings.reports], []);
+      pairing.assertClosed();
+      settings.assertClosed();
+    });
+  }
+}
+
+for (const bytes of [[], [1], [0, 0], Array<number>(63).fill(0)]) {
+  test(`1K routing refuses a ${bytes.length}-byte pairing read starting with ${bytes[0] ?? "nothing"}`, async () => {
+    const pairing = channel("pairing", "NotAllowedError", 0x5402);
+    const settings = channel("settings", "NotAllowedError", 0x5402);
+    pairing.operations.receive = async () =>
+      new DataView(Uint8Array.from(bytes).buffer);
     await assert.rejects(
       pairReceiver([pairing.device, settings.device], {
         timeoutMs: 100,
@@ -330,106 +431,176 @@ for (const { name, configure } of refusals) {
   });
 }
 
-for (const kinds of [
-  ["settings", "settings"],
-  ["pairing", "pairing"],
-  ["settings", "pairing", "pairing"],
-] as const) {
-  test(`passive routing refuses ambiguous roles ${kinds.join("/")} without any pairing output`, async () => {
-    const channels = kinds.map((kind) => channel(kind));
+for (const productId of [0x5402, 0x5403]) {
+  test(`${productId.toString(16)} cannot use the other receiver's passive pairing evidence`, async () => {
+    const pairing = channel("pairing", "NotAllowedError", productId);
+    const settings = channel("settings", "NotAllowedError", productId);
+    pairing.operations.receive = async () => {
+      if (productId === 0x5403)
+        return new DataView(Uint8Array.of(0).buffer);
+      throw new DOMException(
+        "Failed to receive the feature report.",
+        "NotAllowedError",
+      );
+    };
     await assert.rejects(
-      pairReceiver(
-        channels.map(({ device }) => device),
-        {
-          timeoutMs: 100,
-          ioTimeoutMs: 10,
-        },
-      ),
+      pairReceiver([pairing.device, settings.device], {
+        timeoutMs: 100,
+        ioTimeoutMs: 10,
+      }),
+    );
+    assert.deepEqual([...pairing.reports, ...settings.reports], []);
+    pairing.assertClosed();
+    settings.assertClosed();
+  });
+}
+
+for (const secondReply of [Uint8Array.of(1), SETTINGS_REPLY]) {
+  test(`1K routing refuses a short pairing reply that changes on its second read (${secondReply.length} bytes)`, async () => {
+    const pairing = channel("pairing", "NotAllowedError", 0x5402);
+    const settings = channel("settings", "NotAllowedError", 0x5402);
+    pairing.operations.receive = async () =>
+      new DataView(
+        (pairing.calls.receive === 1 ? Uint8Array.of(0) : secondReply.slice())
+          .buffer,
+      );
+    await assert.rejects(
+      pairReceiver([pairing.device, settings.device], {
+        timeoutMs: 100,
+        ioTimeoutMs: 10,
+      }),
+    );
+    assert.deepEqual([...pairing.reports, ...settings.reports], []);
+    pairing.assertClosed();
+    settings.assertClosed();
+  });
+}
+
+for (const productIds of [
+  [0x5402, 0x5403],
+  [0x5403, 0x5402],
+  [0x5402, 0x5402, 0x5403, 0x5403],
+]) {
+  test(`mixed receiver products ${productIds.map((id) => id.toString(16)).join("/")} are refused before opening`, async () => {
+    const channels = productIds.map((productId, index) =>
+      channel(index % 2 ? "settings" : "pairing", "NotAllowedError", productId),
+    );
+    await assert.rejects(
+      pairReceiver(channels.map(({ device }) => device), {
+        timeoutMs: 100,
+        ioTimeoutMs: 10,
+      }),
     );
     for (const candidate of channels) {
+      assert.equal(candidate.calls.open, 0);
       assert.deepEqual(candidate.reports, []);
       candidate.assertClosed();
     }
   });
 }
 
-for (const kind of ["pairing", "settings"] as const) {
-  test(`one granted ${kind} interface with the shared descriptor cannot establish a safe route`, async () => {
-    const only = channel(kind);
-    await assert.rejects(
-      pairReceiver([only.device], {
-        timeoutMs: 100,
-        ioTimeoutMs: 10,
-      }),
-    );
-    assert.deepEqual(only.reports, []);
-    only.assertClosed();
-  });
-}
+for (const productId of [0x5402, 0x5403]) {
+  for (const kinds of [
+    ["settings", "settings"],
+    ["pairing", "pairing"],
+    ["settings", "pairing", "pairing"],
+  ] as const) {
+    test(`${productId.toString(16)} passive routing refuses ambiguous roles ${kinds.join("/")} without any pairing output`, async () => {
+      const channels = kinds.map((kind) => channel(kind, "NotAllowedError", productId));
+      await assert.rejects(
+        pairReceiver(
+          channels.map(({ device }) => device),
+          {
+            timeoutMs: 100,
+            ioTimeoutMs: 10,
+          },
+        ),
+      );
+      for (const candidate of channels) {
+        assert.deepEqual(candidate.reports, []);
+        candidate.assertClosed();
+      }
+    });
+  }
 
-for (const missing of ["one", "both"] as const) {
-  test(`two-interface routing refuses ${missing} missing feature-report descriptors before opening`, async () => {
-    const pairing = channel("pairing");
-    const settings = channel("settings");
-    pairing.device.collections[0].featureReports = [];
-    if (missing === "both") settings.device.collections[0].featureReports = [];
+  for (const kind of ["pairing", "settings"] as const) {
+    test(`${productId.toString(16)} one granted ${kind} interface with the shared descriptor cannot establish a safe route`, async () => {
+      const only = channel(kind, "NotAllowedError", productId);
+      await assert.rejects(
+        pairReceiver([only.device], {
+          timeoutMs: 100,
+          ioTimeoutMs: 10,
+        }),
+      );
+      assert.deepEqual(only.reports, []);
+      only.assertClosed();
+    });
+  }
+
+  for (const missing of ["one", "both"] as const) {
+    test(`${productId.toString(16)} two-interface routing refuses ${missing} missing feature-report descriptors before opening`, async () => {
+      const pairing = channel("pairing", "NotAllowedError", productId);
+      const settings = channel("settings", "NotAllowedError", productId);
+      pairing.device.collections[0].featureReports = [];
+      if (missing === "both") settings.device.collections[0].featureReports = [];
+      await assert.rejects(
+        pairReceiver([pairing.device, settings.device], {
+          timeoutMs: 100,
+          ioTimeoutMs: 10,
+        }),
+      );
+      assert.equal(pairing.calls.open + settings.calls.open, 0);
+      assert.deepEqual([...pairing.reports, ...settings.reports], []);
+      pairing.assertClosed();
+      settings.assertClosed();
+    });
+  }
+
+  test(`${productId.toString(16)} cancellation while resolving identical interfaces prevents pairing output and cleans up`, async () => {
+    const pairing = channel("pairing", "NotAllowedError", productId);
+    const settings = channel("settings", "NotAllowedError", productId);
+    const controller = new AbortController();
+    settings.operations.receive = async () => {
+      controller.abort();
+      return new DataView(SETTINGS_REPLY.slice().buffer);
+    };
+    await assert.rejects(
+      pairReceiver([pairing.device, settings.device], {
+        signal: controller.signal,
+        timeoutMs: 100,
+        ioTimeoutMs: 50,
+      }),
+      /停止/,
+    );
+    assert.deepEqual([...pairing.reports, ...settings.reports], []);
+    assert.equal(getEventListeners(controller.signal, "abort").length, 0);
+    pairing.assertClosed();
+    settings.assertClosed();
+  });
+
+  test(`${productId.toString(16)} routing open that completes after timeout is closed without sending`, async () => {
+    const pairing = channel("pairing", "NotAllowedError", productId);
+    const settings = channel("settings", "NotAllowedError", productId);
+    let finishOpen!: () => void;
+    pairing.operations.open = () =>
+      new Promise<void>((resolve) => {
+        finishOpen = resolve;
+      });
     await assert.rejects(
       pairReceiver([pairing.device, settings.device], {
         timeoutMs: 100,
         ioTimeoutMs: 10,
       }),
     );
-    assert.equal(pairing.calls.open + settings.calls.open, 0);
     assert.deepEqual([...pairing.reports, ...settings.reports], []);
+    assert.equal(
+      typeof finishOpen,
+      "function",
+      "The resolver attempts the passive candidate open",
+    );
+    finishOpen();
+    await setImmediate();
     pairing.assertClosed();
     settings.assertClosed();
   });
 }
-
-test("cancellation while resolving identical interfaces prevents pairing output and cleans up", async () => {
-  const pairing = channel("pairing");
-  const settings = channel("settings");
-  const controller = new AbortController();
-  settings.operations.receive = async () => {
-    controller.abort();
-    return new DataView(SETTINGS_REPLY.slice().buffer);
-  };
-  await assert.rejects(
-    pairReceiver([pairing.device, settings.device], {
-      signal: controller.signal,
-      timeoutMs: 100,
-      ioTimeoutMs: 50,
-    }),
-    /停止/,
-  );
-  assert.deepEqual([...pairing.reports, ...settings.reports], []);
-  assert.equal(getEventListeners(controller.signal, "abort").length, 0);
-  pairing.assertClosed();
-  settings.assertClosed();
-});
-
-test("a routing open that completes after timeout is closed without sending", async () => {
-  const pairing = channel("pairing");
-  const settings = channel("settings");
-  let finishOpen!: () => void;
-  pairing.operations.open = () =>
-    new Promise<void>((resolve) => {
-      finishOpen = resolve;
-    });
-  await assert.rejects(
-    pairReceiver([pairing.device, settings.device], {
-      timeoutMs: 100,
-      ioTimeoutMs: 10,
-    }),
-  );
-  assert.deepEqual([...pairing.reports, ...settings.reports], []);
-  assert.equal(
-    typeof finishOpen,
-    "function",
-    "The resolver attempts the passive candidate open",
-  );
-  finishOpen();
-  await setImmediate();
-  pairing.assertClosed();
-  settings.assertClosed();
-});
