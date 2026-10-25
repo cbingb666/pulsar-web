@@ -1,4 +1,4 @@
-<!-- source: docs/protocol.md; source-sha256: 12f7cfb1ccd852cbf7d0d2a5de0d4d2dca398b3a6e1fb0ea6c758cefd9f05187 -->
+<!-- source: docs/protocol.md; source-sha256: 3e069146e67e259928a03f7a8034034c034f094a2a7add7caa8c95bf75442bb4 -->
 
 # Xlite v4 Mini configuration protocol
 
@@ -83,8 +83,9 @@ Physical button IDs 1/2/3/4/5/11 were read successfully. Native `Device.ButtonID
 
 ## Implementation / acceptance rules
 
-- Opening/reconnecting a device performs read commands only and never flushes saved drafts. Explicit edits to performance controls use the single-field immediate-settings path; numeric inputs commit after editing and sliders at gesture completion. Other controls remain local until Apply.
-- Immediate edits are built from device readback, never from the whole editable draft. Check the current profile and relevant device settings before writing; external changes require a refresh. Merge only the requested field back into the workspace so pending bindings, imported layouts, colors and other drafts remain uncommitted.
+- Opening/reconnecting a device performs read commands only and never flushes saved drafts. Explicit edits to all performance controls trigger background saving: numeric inputs commit on Enter or blur, sliders when adjustment ends, colors when selection is complete, and buttons on click. Loading, importing, or restoring a draft does not itself trigger writes.
+- Immediate edits are built from device readback, replacing only the requested field or an explicitly confirmed DPI group, never the whole editable draft. Check the current profile and relevant device settings before writing; external changes require a fresh read. If an imported or offline DPI layout is unapplied, or the stage count differs from the device, the first explicit DPI value, stage switch, color, or stage add/remove action submits the visible `dpiStages` and `activeStage`. The page explains this behavior beforehand; other imported fields are not submitted with it.
+- Background performance tasks run serially, and readback must not overwrite newer edits. Performance controls remain available while saving, without a full-page busy overlay or success popup for every save. A failure retains drafts and pauses further automatic writes until the device is read again.
 - Validate an entire batch before the first write. Do not overwrite unchanged fields.
 - Match the native debounce setter (value then zero); preserve unexposed LED bytes.
 - Wait for write completion, then read back settings and reject mismatches. The private 8K receiver-indicator setter may proceed from an exact retained previous completion to mandatory readback, as described below; the retained packet is not a write acknowledgement.

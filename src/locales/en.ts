@@ -1,5 +1,8 @@
 // Chinese source messages are the keys; maintain English translations only here.
 export const englishMessages: Readonly<Record<string, string>> = {
+  "正在自动保存…": "Saving automatically…",
+  "修改 DPI 会自动保存当前档位布局；其他草稿仍需应用。": "Editing DPI automatically saves the current stage layout. Other drafts still require Apply.",
+  "请等待设备操作完成后再导入配置。": "Wait for the device operation to finish before importing a profile.",
   设备概览: "Device overview",
   按键设置: "Button settings",
   性能设置: "Performance",
@@ -25,16 +28,11 @@ export const englishMessages: Readonly<Record<string, string>> = {
   "浏览器本地存储不可用，请导出配置备份。":
     "Browser storage is unavailable. Export a profile backup.",
   "宏保存失败，请导出备份。": "Could not save macros. Export a backup.",
-  "更改已暂存。请先重新读取设备，恢复即时应用。":
-    "Changes saved as a draft. Read the device again to resume immediate updates.",
-  "DPI 档位增删或导入草稿尚未应用，本次更改已暂存。请点击“应用到鼠标”。":
-    "DPI stage changes or an imported draft have not been applied. This change remains a draft. Click “Apply to mouse”.",
+  "更改已暂存。请先重新读取设备，恢复自动保存。":
+    "Change kept as a draft. Read the device again to resume automatic saving.",
   "{0}未写入：{1}": "{0} was not written: {1}",
-  "正在应用{0}": "Applying {0}",
-  "{0}已生效，设备回读已确认。":
-    "{0} applied and confirmed by device readback.",
-  "{0}未确认生效：{1}。已暂停即时应用，请重新读取设备检查实际值。":
-    "{0} could not be confirmed: {1}. Immediate updates are paused. Read the device again to check its actual settings.",
+  "{0}未确认生效：{1}。已暂停自动保存，请重新读取设备检查实际值。":
+    "Could not confirm {0}: {1}. Automatic saving is paused. Read the device again to check its actual settings.",
   "请在浏览器中选择目标 USB 设备…":
     "Select the target USB device in the browser…",
   固件刷写: "Firmware flashing",
@@ -192,11 +190,12 @@ export const englishMessages: Readonly<Record<string, string>> = {
   设备电量: "Device battery",
   "查看电量详情 ": "Battery details ",
   快速开始: "Quick start",
-  性能设置即时生效: "Performance changes apply immediately",
-  "连接并读取后，性能设置即时生效":
-    "Connect and read settings to enable immediate performance updates",
-  "DPI 档位、回报率、LOD 和传感器开关点击即生效。 DPI 数值按 Enter 或离开输入框时保存，消抖滑块松开时保存。":
-    "DPI stage, polling rate, LOD, and sensor switches apply on click. DPI values save on Enter or when leaving the input. Debounce saves when the slider is released.",
+  "性能设置自动保存":
+    "Performance settings save automatically",
+  "连接并读取后，性能设置自动保存":
+    "Performance settings save automatically after connecting and reading the device",
+  "所有性能设置均自动保存。DPI 数值按 Enter 或离开输入框时保存；颜色选择完成、滑块调节结束后保存。":
+    "All performance settings save automatically. DPI values save on Enter or when you leave the field; colors save when selected, and sliders save when adjustment ends.",
   "DPI 灵敏度": "DPI sensitivity",
   "点击编号切换当前档位；数值编辑完成后自动应用。":
     "Click a stage number to switch. Values apply when editing is finished.",
@@ -213,8 +212,8 @@ export const englishMessages: Readonly<Record<string, string>> = {
   "档位 {0} Y DPI": "Stage {0} Y DPI",
   "第 {0} 档 Y DPI": "Stage {0} Y DPI",
   当前档位: "Active stage",
-  "50 – 32,000 DPI · 步长 10 · 档位增删和颜色需点击应用":
-    "50–32,000 DPI · Step 10 · Apply stage and color changes manually",
+  "50 – 32,000 DPI · 步长 10 · 档位增删和颜色自动保存":
+    "50–32,000 DPI · Step 10 · Stage layout and colors save automatically",
   添加档位: "Add stage",
   每秒向电脑报告位置的次数:
     "Position reports sent to your computer each second",
@@ -236,8 +235,8 @@ export const englishMessages: Readonly<Record<string, string>> = {
   "较低的时间可能增加重复点击的概率。":
     "Lower values may increase the chance of double clicks.",
   "DPI 指示灯": "DPI indicator",
-  "灯光和颜色更改暂存，点击“应用到鼠标”后保存。":
-    "Lighting and color changes remain drafts until you click “Apply to mouse”.",
+  "选择灯效后自动保存；亮度和呼吸速度调节结束后保存。":
+    "Lighting effects save on selection; brightness and breathing speed save when adjustment ends.",
   灯光效果: "Lighting effect",
   关闭灯光: "Off",
   常亮: "Steady",
@@ -370,8 +369,8 @@ export const englishMessages: Readonly<Record<string, string>> = {
   更改尚未应用: "Unapplied changes",
   请重新读取设备: "Read the device again",
   设置已保存在此浏览器: "Settings saved in this browser",
-  "性能调整即时生效；按键、灯光、电源和导入等更改需点击应用。":
-    "Performance updates apply immediately. Button, lighting, power, and imported changes require Apply.",
+  "性能页设置自动保存；按键、电源和导入的其他更改需点击应用。":
+    "Performance settings save automatically. Button, power, and other imported changes require Apply.",
   "离线编辑仅存为草稿，连接后不会自动写入。":
     "Offline edits stay as drafts and are not written automatically after connecting.",
   重新读取: "Read again",
@@ -390,10 +389,10 @@ export const englishMessages: Readonly<Record<string, string>> = {
     "Select Xlite v4 in the browser picker. For receivers, choose “1K Dongle” or “8K Dongle”, then allow access.",
   "1K 或 8K 接收器尚未配对时，先点击顶部“配对接收器”按提示操作。":
     "If your 1K or 8K receiver is not paired, click “Pair receiver” at the top and follow the steps.",
-  "性能调整即时生效；DPI 数值完成输入、消抖滑块松开后保存。":
-    "Performance changes apply immediately. DPI values save when editing ends; debounce saves when the slider is released.",
-  "按键、灯光、电源、档位增删和导入草稿需点击“应用到鼠标”；宏需点击上传。":
-    "Button, lighting, power, stage layout, and imported drafts require “Apply to mouse”. Macros require Upload.",
+  "性能页设置自动保存；DPI 数值完成输入、颜色选择完成、滑块调节结束后保存。":
+    "Performance settings save automatically when DPI editing, color selection, or slider adjustment ends.",
+  "按键、电源和导入的其他草稿需点击“应用到鼠标”；宏需点击上传。":
+    "Button, power, and other imported drafts require “Apply to mouse”. Macros require Upload.",
   "支持配置切换与宏上传；电源管理页提供实验性 USB 有线固件刷写。暂不支持宏移动轨迹和实时无线信号显示；浏览器无法修改 Windows 系统设置。":
     "Profile switching and macro upload are supported. Power management includes experimental USB wired firmware flashing. Macro movement paths and live wireless signal display are currently unsupported. The browser cannot change Windows system settings.",
   知道了: "Got it",

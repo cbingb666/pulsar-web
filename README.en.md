@@ -1,4 +1,4 @@
-<!-- source: README.md; source-sha256: 95722bbb2a863a4ba2753bb4cc6d0d541dc54030ce5b51d86cebc59b3aaac482 -->
+<!-- source: README.md; source-sha256: 0aee8a69b4872361010078f5843428b4891d5226a2eb1d5f6da01b72dab62788 -->
 
 # Pulsar Fusion Web
 
@@ -38,7 +38,7 @@ For GitHub Pages, select **GitHub Actions** under repository **Settings → Page
 
 ## Features and compatibility
 
-- Read device settings; common performance changes apply immediately, while other changes are staged for confirmation.
+- Read device settings; performance changes save in the background, while button, power, and imported draft changes are staged for confirmation.
 - Read and switch six device profile slots; local drafts and JSON profile backup, import, and export.
 - 1–6 DPI stages, independent X/Y, 50–32000 DPI in steps of 10, active stage, and per-stage indicator colors.
 - Polling rate, 0–15 ms debounce, 0.7/1/2 mm LOD, Motion Sync, angle snapping, and ripple control.
@@ -87,17 +87,20 @@ Power-loss or interruption recovery, other firmware/models, and post-update 8K w
 
 ## When changes apply
 
-After connecting and reading the device:
+After connecting and reading the device, performance changes save in the background without clicking **Apply to mouse**:
 
 | Setting | Save point |
 | --- | --- |
-| Active DPI stage, polling rate, LOD, Motion Sync, angle snapping, ripple control | Immediate write and readback on selection |
+| Active DPI stage, stage add/remove, polling rate, LOD, Motion Sync, angle snapping, ripple control, DPI lighting effect | Save automatically on selection |
 | DPI X/Y numbers | Enter or leaving the field after an actual edit |
-| Debounce | Release the slider or adjustment key; focus alone does not save |
-| Button bindings, stage add/remove, colors/lighting, power, imported/default drafts | **Apply to mouse** |
+| DPI stage colors | Save automatically when color selection is complete |
+| Debounce, lighting brightness, breathing speed | Release the slider or adjustment key; focus alone does not save |
+| Button bindings, power, imported/default drafts | **Apply to mouse** |
 | Macro content | Upload; its button binding still needs Apply |
 
-Immediate actions save only the fields changed by that action and retain other drafts. While stage-layout or imported changes are pending, DPI changes stay staged. Apply the full layout before immediate DPI changes resume. Offline editing and reconnection never automatically submit old drafts. External device-setting changes or write failures stop immediate apply; read the actual settings again.
+You can keep adjusting performance settings while saving. Each action saves only the settings changed by that action and retains other drafts. If a DPI layout has not been applied, changing a DPI value, switching stages, choosing a stage color, or adding/removing a stage saves the entire visible DPI stage layout. Other drafts still require **Apply to mouse**.
+
+Offline editing, importing a profile, and reconnecting never automatically write old drafts. External device-setting changes or background save failures pause automatic saving and display an error. Read the actual settings again before continuing.
 
 ## Limits and risks
 

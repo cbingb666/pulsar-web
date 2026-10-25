@@ -7,6 +7,7 @@ import {
   type DeviceSnapshot,
   type GlobalSettings,
   type ProfileSettings,
+  type Rgb,
 } from "./protocol";
 import { clone, type WorkspaceProfile } from "./workspace";
 
@@ -20,10 +21,28 @@ type ImmediateGlobalChange = {
   };
 }[ImmediateGlobalField];
 
+type ImmediateProfileField =
+  | "lod"
+  | "activeStage"
+  | "brightness"
+  | "ledEffect"
+  | "breatheSpeed";
+type ImmediateProfileChange = {
+  [Field in ImmediateProfileField]: {
+    kind: Field;
+    value: ProfileSettings[Field];
+  };
+}[ImmediateProfileField];
+
 export type ImmediateChange =
   | ImmediateGlobalChange
-  | { kind: "lod"; value: number }
-  | { kind: "activeStage"; value: number }
+  | ImmediateProfileChange
+  | {
+      kind: "dpiLayout";
+      dpiStages: ProfileSettings["dpiStages"];
+      activeStage: number;
+    }
+  | { kind: "color"; stage: number; value: Rgb }
   | ({ kind: "dpi"; stage: number } & (
       { x: number; y?: number } | { x?: number; y: number }
     ));
@@ -86,13 +105,29 @@ export function buildImmediateSettings(
       validateGlobal(next.global);
       break;
     case "lod":
+    case "activeStage":
+    case "brightness":
+    case "ledEffect":
+    case "breatheSpeed":
       validateProfile(snapshot.profile);
-      next.profile.lod = change.value;
+      Object.assign(next.profile, { [change.kind]: change.value });
       validateProfile(next.profile);
       break;
-    case "activeStage":
+    case "dpiLayout":
       validateProfile(snapshot.profile);
-      next.profile.activeStage = change.value;
+      next.profile.dpiStages = clone(change.dpiStages);
+      next.profile.activeStage = change.activeStage;
+      validateProfile(next.profile);
+      break;
+    case "color":
+      validateProfile(snapshot.profile);
+      integerInRange(
+        change.stage,
+        1,
+        next.profile.dpiStages.length,
+        t("DPI 档位"),
+      );
+      next.profile.dpiStages[change.stage - 1].color = clone(change.value);
       validateProfile(next.profile);
       break;
     case "dpi": {
@@ -117,7 +152,7 @@ export function buildImmediateSettings(
   return next;
 }
 
-/** Keep other pending edits, including incomplete inputs, after device readback. */
+/** Merge acknowledged edits only while their submitted values remain current. */
 export function mergeImmediateSettings(
   draft: WorkspaceProfile,
   actual: DeviceSnapshot,
@@ -130,30 +165,58 @@ export function mergeImmediateSettings(
     case "global":
       if (!globalFields.includes(change.field))
         throw new Error(t("不支持立即应用此设置"));
-      Object.assign(next.global, {
-        [change.field]: actual.global[change.field],
-      });
+      if (same(next.global[change.field], change.value))
+        Object.assign(next.global, {
+          [change.field]: actual.global[change.field],
+        });
       break;
     case "lod":
-      next.profile.lod = actual.profile.lod;
-      break;
     case "activeStage":
-      next.profile.activeStage = actual.profile.activeStage;
+    case "brightness":
+    case "ledEffect":
+    case "breatheSpeed":
+      if (same(next.profile[change.kind], change.value))
+        Object.assign(next.profile, {
+          [change.kind]: actual.profile[change.kind],
+        });
+      break;
+    case "dpiLayout":
+      if (
+        same(next.profile.dpiStages, change.dpiStages) &&
+        next.profile.activeStage === change.activeStage
+      ) {
+        next.profile.dpiStages = clone(actual.profile.dpiStages);
+        next.profile.activeStage = actual.profile.activeStage;
+        next.dpiLayoutPending = false;
+      }
+      break;
+    case "color":
+      integerInRange(
+        change.stage,
+        1,
+        actual.profile.dpiStages.length,
+        t("DPI 档位"),
+      );
+      if (same(next.profile.dpiStages[change.stage - 1]?.color, change.value))
+        next.profile.dpiStages[change.stage - 1].color = clone(
+          actual.profile.dpiStages[change.stage - 1].color,
+        );
       break;
     case "dpi": {
       integerInRange(
         change.stage,
         1,
-        Math.min(
-          next.profile.dpiStages.length,
-          actual.profile.dpiStages.length,
-        ),
+        actual.profile.dpiStages.length,
         t("DPI 档位"),
       );
       const stage = next.profile.dpiStages[change.stage - 1];
       const readback = actual.profile.dpiStages[change.stage - 1];
-      if (change.x !== undefined) stage.x = readback.x;
-      if (change.y !== undefined) stage.y = readback.y;
+      if (stage) {
+        if (change.x !== undefined && same(stage.x, change.x))
+          stage.x = readback.x;
+        if (change.y !== undefined && same(stage.y, change.y))
+          stage.y = readback.y;
+      }
       break;
     }
     default:

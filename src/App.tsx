@@ -114,11 +114,11 @@ import {
   decodeMacroBinding,
 } from "./macro-codec";
 import {
-  applyImmediateSetting,
   buildImmediateSettings,
   mergeImmediateSettings,
   type ImmediateChange,
 } from "./immediate-settings";
+import { PerformanceAutosave } from "./performance-autosave";
 
 type Tab =
   | "home"
@@ -334,6 +334,53 @@ function DpiInput({
     />
   );
 }
+function ColorInput({
+  label,
+  value,
+  onChange,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  onCommit: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const edited = useRef(false);
+  const commitRef = useRef(onCommit);
+  commitRef.current = onCommit;
+  const commit = (value: string) => {
+    if (!edited.current) return;
+    edited.current = false;
+    commitRef.current(value);
+  };
+  useEffect(() => {
+    const input = inputRef.current!;
+    // React's color onChange also fires during native picker previews.
+    // The native change event marks a completed selection; let React stage it first.
+    const selected = () => {
+      const value = input.value;
+      edited.current = true;
+      queueMicrotask(() => commit(value));
+    };
+    input.addEventListener("change", selected);
+    return () => input.removeEventListener("change", selected);
+  }, []);
+  return (
+    <input
+      ref={inputRef}
+      type="color"
+      aria-label={label}
+      title={t("DPI 指示灯颜色")}
+      value={value}
+      onChange={(event) => {
+        edited.current = true;
+        onChange(event.currentTarget.value);
+      }}
+      onBlur={(event) => commit(event.currentTarget.value)}
+    />
+  );
+}
 function MouseFigure({
   selected,
   onSelect,
@@ -458,11 +505,13 @@ function MouseFigure({
 export default function App() {
   const locale = useLocale();
   const [tab, setTab] = useState<Tab>("performance");
-  const [profiles, setProfiles] = useState<WorkspaceProfile[]>(loadWorkspace);
+  const [profiles, setProfilesState] =
+    useState<WorkspaceProfile[]>(loadWorkspace);
   const [selectedProfile, setSelectedProfile] = useState(1);
-  const [snapshot, setSnapshot] = useState<DeviceSnapshot | null>(null);
+  const [snapshot, setSnapshotState] = useState<DeviceSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState("");
+  const [autosaving, setAutosaving] = useState(false);
   const [notice, setNotice] = useState<{
     text: string;
     error?: boolean;
@@ -530,6 +579,10 @@ export default function App() {
   const importRef = useRef<HTMLInputElement>(null);
   const clientRef = useRef<PulsarHidClient | null>(null);
   const busyRef = useRef(false);
+  const profilesRef = useRef(profiles);
+  const snapshotRef = useRef(snapshot);
+  const autosaveRef = useRef<PerformanceAutosave | null>(null);
+  const deviceBusy = !!busy || autosaving;
   const current = profiles[selectedProfile - 1];
   const p = current.profile;
   const g = current.global;
@@ -552,6 +605,35 @@ export default function App() {
       },
     });
     clientRef.current = c;
+    const autosave = new PerformanceAutosave({
+      onSaved(actual, change) {
+        if (clientRef.current !== c) return;
+        setSnapshot(actual);
+        setProfiles((old) =>
+          old.map((draft, index) =>
+            index === actual.profile.profile - 1
+              ? mergeImmediateSettings(draft, actual, change)
+              : draft,
+          ),
+        );
+        setLogVersion((value) => value + 1);
+      },
+      onError(error, label) {
+        if (clientRef.current !== c) return;
+        setSnapshot(null);
+        const message = String(error instanceof Error ? error.message : error)
+          .replace(/[。.]$/, "");
+        setNotice({
+          text: t`${label}未确认生效：${message}。已暂停自动保存，请重新读取设备检查实际值。`,
+          error: true,
+        });
+      },
+      onPending(pending) {
+        if (clientRef.current === c) setAutosaving(pending);
+      },
+    });
+    autosaveRef.current = autosave;
+    setAutosaving(false);
     // Defer until after StrictMode's setup/cleanup replay, using this mount's client.
     void Promise.resolve().then(() => {
       if (clientRef.current === c && isWebHidSupported())
@@ -562,6 +644,8 @@ export default function App() {
       firmwareAbort.current?.abort();
       firmwareValidation.current++;
       clientRef.current = null;
+      autosaveRef.current = null;
+      autosave.reset(null, null);
       busyRef.current = false;
       void c.dispose();
     };
@@ -612,13 +696,27 @@ export default function App() {
     const id = setTimeout(() => setNotice(null), 9000);
     return () => clearTimeout(id);
   }, [notice]);
+  function setProfiles(updater: (old: WorkspaceProfile[]) => WorkspaceProfile[]) {
+    const next = updater(profilesRef.current);
+    profilesRef.current = next;
+    setProfilesState(next);
+  }
+  function setSnapshot(value: DeviceSnapshot | null) {
+    snapshotRef.current = value;
+    setSnapshotState(value);
+    if (!value) autosaveRef.current?.reset(null, null);
+  }
   function update(updater: (value: WorkspaceProfile) => WorkspaceProfile) {
     if (busyRef.current) return;
+    let updated: WorkspaceProfile | undefined;
     setProfiles((old) =>
       old.map((v, i) =>
-        i === selectedProfile - 1 ? { ...updater(clone(v)), pending: true } : v,
+        i === selectedProfile - 1
+          ? (updated = { ...updater(clone(v)), pending: true })
+          : v,
       ),
     );
+    return updated;
   }
   const setProfile = (patch: Partial<ProfileSettings>, layoutChange = false) =>
     update((v) => ({
@@ -629,7 +727,7 @@ export default function App() {
   const setGlobal = (patch: Partial<GlobalSettings>) =>
     update((v) => ({ ...v, global: { ...v.global, ...patch } }));
   function stageImmediateChange(change: ImmediateChange) {
-    update((v) => {
+    return update((v) => {
       if (change.kind === "global")
         v.global = { ...v.global, [change.field]: change.value };
       else if (change.kind === "dpi")
@@ -638,38 +736,48 @@ export default function App() {
             ? { ...stage, x: change.x ?? stage.x, y: change.y ?? stage.y }
             : stage,
         );
-      else v.profile = { ...v.profile, [change.kind]: change.value };
+      else if (change.kind === "color")
+        v.profile.dpiStages = v.profile.dpiStages.map((stage, index) =>
+          index + 1 === change.stage ? { ...stage, color: change.value } : stage,
+        );
+      else if (change.kind === "dpiLayout") {
+        v.profile.dpiStages = clone(change.dpiStages);
+        v.profile.activeStage = change.activeStage;
+        v.dpiLayoutPending = true;
+      } else v.profile = { ...v.profile, [change.kind]: change.value };
       return v;
     });
   }
-  async function commitImmediate(change: ImmediateChange, label: string) {
+  function commitImmediate(change: ImmediateChange, label: string) {
     if (busyRef.current) return;
-    stageImmediateChange(change);
+    const draft = stageImmediateChange(change);
+    if (!draft) return;
     // Only explicit control events reach this path; loading/importing a draft
     // or reconnecting must never automatically flush saved browser settings.
-    if (!connected || !snapshot) {
+    const baseline = snapshotRef.current;
+    if (!connected || !baseline) {
       if (connected)
         setNotice({
-          text: t("更改已暂存。请先重新读取设备，恢复即时应用。"),
+          text: t("更改已暂存。请先重新读取设备，恢复自动保存。"),
           error: true,
         });
       return;
     }
     if (
-      (change.kind === "dpi" || change.kind === "activeStage") &&
-      (current.dpiLayoutPending ||
-        p.dpiStages.length !== snapshot.profile.dpiStages.length)
+      (change.kind === "dpi" ||
+        change.kind === "activeStage" ||
+        change.kind === "color") &&
+      (draft.dpiLayoutPending ||
+        draft.profile.dpiStages.length !== baseline.profile.dpiStages.length)
     ) {
-      setNotice({
-        text: t(
-          "DPI 档位增删或导入草稿尚未应用，本次更改已暂存。请点击“应用到鼠标”。",
-        ),
-      });
-      return;
+      change = {
+        kind: "dpiLayout",
+        dpiStages: clone(draft.profile.dpiStages),
+        activeStage: draft.profile.activeStage,
+      };
     }
-    let next: DeviceSnapshot;
     try {
-      next = buildImmediateSettings(snapshot, change);
+      buildImmediateSettings(baseline, change);
     } catch (error) {
       setNotice({
         text: t`${label}未写入：${error instanceof Error ? error.message : error}`,
@@ -677,34 +785,24 @@ export default function App() {
       });
       return;
     }
-    const mergeSaved = (actual: DeviceSnapshot) =>
-      setProfiles((old) =>
-        old.map((v, index) =>
-          index === selectedProfile - 1
-            ? mergeImmediateSettings(v, actual, change)
-            : v,
-        ),
-      );
-    if (
-      equal(next.global, snapshot.global) &&
-      equal(next.profile, snapshot.profile)
-    ) {
-      mergeSaved(snapshot);
-      return;
-    }
-    await run(t`正在应用${label}`, async () => {
-      try {
-        const actual = await applyImmediateSetting(client(), snapshot, change);
-        setSnapshot(actual);
-        mergeSaved(actual);
-        setNotice({ text: t`${label}已生效，设备回读已确认。` });
-      } catch (error) {
-        setSnapshot(null);
-        throw new Error(
-          t`${label}未确认生效：${error instanceof Error ? error.message : error}。已暂停即时应用，请重新读取设备检查实际值。`,
-        );
-      }
-    });
+    autosaveRef.current?.enqueue(change, label);
+  }
+  function changeDpiLayout(removeIndex?: number) {
+    const profile = profilesRef.current[selectedProfile - 1].profile;
+    if (removeIndex === undefined && profile.dpiStages.length >= 6) return;
+    if (removeIndex !== undefined && profile.dpiStages.length <= 1) return;
+    const dpiStages =
+      removeIndex === undefined
+        ? [...profile.dpiStages, { x: 1600, y: 1600, color: [0, 132, 255] as Rgb }]
+        : profile.dpiStages.filter((_, index) => index !== removeIndex);
+    const activeStage =
+      removeIndex !== undefined && profile.activeStage > removeIndex + 1
+        ? profile.activeStage - 1
+        : Math.min(profile.activeStage, dpiStages.length);
+    commitImmediate(
+      { kind: "dpiLayout", dpiStages, activeStage },
+      t("DPI 档位"),
+    );
   }
   function applySnapshot(
     s: DeviceSnapshot,
@@ -712,6 +810,7 @@ export default function App() {
     preserveDraft = false,
   ) {
     setSnapshot(s);
+    autosaveRef.current?.reset(clientRef.current, s);
     setPowerDraft(s.power ? clone(s.power) : undefined);
     setProfiles((old) =>
       old.map((v, i) =>
@@ -731,7 +830,7 @@ export default function App() {
     setLogVersion((v) => v + 1);
   }
   async function run(label: string, fn: () => Promise<void>, c = client()) {
-    if (busyRef.current) return;
+    if (busyRef.current || autosaveRef.current?.pending) return;
     busyRef.current = true;
     setBusy(label);
     try {
@@ -755,7 +854,12 @@ export default function App() {
     await connectDevice(false);
   }
   async function selectFirmware(file: File) {
-    if (busyRef.current || firmwareStage !== "prepare") return;
+    if (
+      busyRef.current ||
+      autosaveRef.current?.pending ||
+      firmwareStage !== "prepare"
+    )
+      return;
     const token = ++firmwareValidation.current;
     setFirmware(null);
     setFirmwareValidating(true);
@@ -779,6 +883,7 @@ export default function App() {
   async function startFirmware() {
     if (
       busyRef.current ||
+      autosaveRef.current?.pending ||
       firmwareValidating ||
       !firmware ||
       firmwareStage === "complete"
@@ -945,7 +1050,7 @@ export default function App() {
       firmwareDiagnostics.current.logs.shift();
   }
   async function startPairing() {
-    if (busyRef.current) return;
+    if (busyRef.current || autosaveRef.current?.pending) return;
     const c = client();
     const controller = new AbortController();
     pairingAbort.current = controller;
@@ -1107,7 +1212,8 @@ export default function App() {
     });
   }
   async function chooseProfile(index: number) {
-    if (busy || index === selectedProfile) return;
+    if (deviceBusy || autosaveRef.current?.pending || index === selectedProfile)
+      return;
     if (dirty) {
       setNotice({
         text: t("请先应用当前更改，或点击“重新读取”放弃更改。"),
@@ -1229,7 +1335,10 @@ export default function App() {
     if (!file) return;
     try {
       if (file.size > 200000) throw new Error(t("配置文件过大"));
-      const value = parseProfileFile(await file.text(), selectedProfile);
+      const text = await file.text();
+      if (busyRef.current || autosaveRef.current?.pending)
+        throw new Error(t("请等待设备操作完成后再导入配置。"));
+      const value = parseProfileFile(text, selectedProfile);
       update(() => value);
       setNotice({
         text: t("已导入到本地草稿。连接设备后点击“应用到鼠标”写入。"),
@@ -1245,13 +1354,15 @@ export default function App() {
     setProfile({ buttons: { ...p.buttons, [selectedButton]: b } });
     setCaptureKey(false);
   }
-  const status = connected
-    ? snapshot
-      ? dirty
-        ? t("有待应用的更改")
-        : t("设备配置已同步")
-      : t("等待读取配置")
-    : t("本地编辑模式");
+  const status = autosaving
+    ? t("正在自动保存…")
+    : connected
+      ? snapshot
+        ? dirty
+          ? t("有待应用的更改")
+          : t("设备配置已同步")
+        : t("等待读取配置")
+      : t("本地编辑模式");
   const page = tabs.find((t) => t.id === tab);
   const currentStage = p.dpiStages[p.activeStage - 1];
   const power = connected ? snapshot?.power : undefined;
@@ -1350,7 +1461,7 @@ export default function App() {
             <button
               ref={pairingTrigger}
               className="button compact"
-              disabled={!!busy}
+              disabled={deviceBusy}
               onClick={() => {
                 setPairingResult(null);
                 setShowPairing(true);
@@ -1372,7 +1483,7 @@ export default function App() {
             {connected ? (
               <button
                 className="button compact"
-                disabled={!!busy}
+                disabled={deviceBusy}
                 onClick={() =>
                   run(t("断开设备"), async () => {
                     const preferenceSaved = saveAutoConnect(false);
@@ -1399,7 +1510,7 @@ export default function App() {
             ) : (
               <button
                 className="button primary compact"
-                disabled={!!busy}
+                disabled={deviceBusy}
                 onClick={connect}
               >
                 <Usb size={16} />
@@ -1438,7 +1549,7 @@ export default function App() {
                 className="icon-button"
                 title={t("重新读取设备（放弃本地更改）")}
                 aria-label={t("重新读取设备")}
-                disabled={!connected || !!busy}
+                disabled={!connected || deviceBusy}
                 onClick={refresh}
               >
                 <RefreshCw size={17} />
@@ -1463,7 +1574,7 @@ export default function App() {
                   "连接鼠标后读取真实设置。当前显示的是本地草稿，尚未写入设备。",
                 )}
               </span>
-              <button onClick={connect} disabled={!!busy}>
+              <button onClick={connect} disabled={deviceBusy}>
                 {t("连接设备 ")}
                 <ChevronRight size={15} />
               </button>
@@ -1572,15 +1683,20 @@ export default function App() {
                     <span>
                       <b>
                         {connected && snapshot
-                          ? t("性能设置即时生效")
-                          : t("连接并读取后，性能设置即时生效")}
+                          ? t("性能设置自动保存")
+                          : t("连接并读取后，性能设置自动保存")}
                       </b>
                       <br />
                       {t(
-                        "DPI 档位、回报率、LOD 和传感器开关点击即生效。 DPI 数值按 Enter 或离开输入框时保存，消抖滑块松开时保存。",
+                        "所有性能设置均自动保存。DPI 数值按 Enter 或离开输入框时保存；颜色选择完成、滑块调节结束后保存。",
                       )}
                     </span>
                   </div>
+                  {connected && snapshot && current.dpiLayoutPending && (
+                    <p className="hint">
+                      {t("修改 DPI 会自动保存当前档位布局；其他草稿仍需应用。")}
+                    </p>
+                  )}
                   <Panel
                     title={t("DPI 灵敏度")}
                     sub={t("点击编号切换当前档位；数值编辑完成后自动应用。")}
@@ -1625,19 +1741,28 @@ export default function App() {
                             >
                               {index + 1}
                             </button>
-                            <input
-                              aria-label={t`档位 ${index + 1} 颜色`}
-                              title={t("DPI 指示灯颜色")}
-                              type="color"
+                            <ColorInput
+                              label={t`档位 ${index + 1} 颜色`}
                               value={rgbHex(stage.color)}
-                              onChange={(e) =>
-                                setProfile({
-                                  dpiStages: p.dpiStages.map((s, i) =>
-                                    i === index
-                                      ? { ...s, color: hexRgb(e.target.value) }
-                                      : s,
-                                  ),
-                                })
+                              onChange={(value) =>
+                                update((draft) => ({
+                                  ...draft,
+                                  profile: {
+                                    ...draft.profile,
+                                    dpiStages: draft.profile.dpiStages.map(
+                                      (item, i) =>
+                                        i === index
+                                          ? { ...item, color: hexRgb(value) }
+                                          : item,
+                                    ),
+                                  },
+                                }))
+                              }
+                              onCommit={(value) =>
+                                commitImmediate(
+                                  { kind: "color", stage: index + 1, value: hexRgb(value) },
+                                  t("DPI 指示灯颜色"),
+                                )
                               }
                             />
                             {p.dpiStages.length > 1 && (
@@ -1645,20 +1770,7 @@ export default function App() {
                                 className="stage-remove"
                                 title={t("移除档位")}
                                 aria-label={t`移除档位 ${index + 1}`}
-                                onClick={() =>
-                                  setProfile(
-                                    {
-                                      dpiStages: p.dpiStages.filter(
-                                        (_, i) => i !== index,
-                                      ),
-                                      activeStage: Math.min(
-                                        p.activeStage,
-                                        p.dpiStages.length - 1,
-                                      ),
-                                    },
-                                    true,
-                                  )
-                                }
+                                onClick={() => changeDpiLayout(index)}
                               >
                                 <X size={12} />
                               </button>
@@ -1728,23 +1840,13 @@ export default function App() {
                     <div className="section-foot">
                       <small>
                         {t(
-                          "50 – 32,000 DPI · 步长 10 · 档位增删和颜色需点击应用",
+                          "50 – 32,000 DPI · 步长 10 · 档位增删和颜色自动保存",
                         )}
                       </small>
                       <button
                         className="text-button"
                         disabled={p.dpiStages.length >= 6}
-                        onClick={() =>
-                          setProfile(
-                            {
-                              dpiStages: [
-                                ...p.dpiStages,
-                                { x: 1600, y: 1600, color: [0, 132, 255] },
-                              ],
-                            },
-                            true,
-                          )
-                        }
+                        onClick={() => changeDpiLayout()}
                       >
                         <Plus size={14} />
                         {t("添加档位")}
@@ -1905,7 +2007,7 @@ export default function App() {
                   </div>
                   <Panel
                     title={t("DPI 指示灯")}
-                    sub={t("灯光和颜色更改暂存，点击“应用到鼠标”后保存。")}
+                    sub={t("选择灯效后自动保存；亮度和呼吸速度调节结束后保存。")}
                     icon={Zap}
                   >
                     <div className="led-layout">
@@ -1920,7 +2022,10 @@ export default function App() {
                                   p.ledEffect === effect ? "active" : ""
                                 }
                                 onClick={() =>
-                                  setProfile({ ledEffect: effect })
+                                  commitImmediate(
+                                    { kind: "ledEffect", value: effect },
+                                    t("灯光效果"),
+                                  )
                                 }
                               >
                                 {[t("关闭灯光"), t("常亮"), t("呼吸")][i]}
@@ -1940,6 +2045,15 @@ export default function App() {
                             brightness: Math.round((brightness / 100) * 255),
                           })
                         }
+                        onCommit={(brightness) =>
+                          commitImmediate(
+                            {
+                              kind: "brightness",
+                              value: Math.round((brightness / 100) * 255),
+                            },
+                            t("亮度"),
+                          )
+                        }
                       />
                       <Range
                         label={t("呼吸速度")}
@@ -1948,6 +2062,12 @@ export default function App() {
                         max={100}
                         onChange={(speed) =>
                           setProfile({ breatheSpeed: 100 - speed })
+                        }
+                        onCommit={(speed) =>
+                          commitImmediate(
+                            { kind: "breatheSpeed", value: 100 - speed },
+                            t("呼吸速度"),
+                          )
                         }
                       />
                     </div>
@@ -2188,7 +2308,7 @@ export default function App() {
                   macros={macros}
                   onChange={setMacros}
                   connected={connected}
-                  deviceBusy={!!busy}
+                  deviceBusy={deviceBusy}
                   deviceMacros={deviceMacros.map((m) => ({
                     ...m,
                     byteLength: m.size,
@@ -2331,7 +2451,7 @@ export default function App() {
                     <button
                       ref={firmwareTrigger}
                       className="button primary"
-                      disabled={!!busy}
+                      disabled={deviceBusy}
                       onClick={() => {
                         if (firmwareStage === "prepare")
                           setFirmwareCurrentVersion(snapshot?.firmwareVersion);
@@ -2370,7 +2490,7 @@ export default function App() {
                         <button
                           key={index}
                           className={`profile-tile ${selectedProfile === index + 1 ? "active" : ""}`}
-                          disabled={!!busy}
+                          disabled={deviceBusy}
                           onClick={() => chooseProfile(index + 1)}
                         >
                           <div>
@@ -2412,6 +2532,7 @@ export default function App() {
                     <div className="button-group">
                       <button
                         className="button"
+                        disabled={deviceBusy}
                         onClick={() => importRef.current?.click()}
                       >
                         <ArrowUpFromLine size={16} />
@@ -2439,7 +2560,7 @@ export default function App() {
                     <div className="button-group">
                       <button
                         className="button"
-                        disabled={!connected || !snapshot}
+                        disabled={!connected || !snapshot || deviceBusy}
                         onClick={() =>
                           setConfirmAction({
                             title: t("恢复当前设备配置？"),
@@ -2473,7 +2594,7 @@ export default function App() {
                       </button>
                       <button
                         className="button danger"
-                        disabled={!connected}
+                        disabled={!connected || deviceBusy}
                         onClick={() =>
                           setConfirmAction({
                             title: t("将鼠标恢复出厂设置？"),
@@ -2687,7 +2808,7 @@ export default function App() {
                 <select
                   aria-label={t("当前配置")}
                   value={selectedProfile}
-                  disabled={!!busy}
+                  disabled={deviceBusy}
                   onChange={(e) => chooseProfile(Number(e.target.value))}
                 >
                   {profiles.map((v, i) => (
@@ -2702,6 +2823,7 @@ export default function App() {
                 <div className="profile-actions">
                   <button
                     title={t("导入配置")}
+                    disabled={deviceBusy}
                     onClick={() => importRef.current?.click()}
                   >
                     <ArrowUpFromLine size={15} />
@@ -2724,6 +2846,7 @@ export default function App() {
               </div>
               <button
                 className="reset-button"
+                disabled={deviceBusy}
                 onClick={() => {
                   update((v) => ({
                     ...v,
@@ -2755,18 +2878,20 @@ export default function App() {
             <span className={`save-status ${dirty ? "dirty" : ""}`}>
               <span />
               {busy ||
-                (connected
-                  ? dirty
-                    ? t("更改尚未应用")
-                    : snapshot
-                      ? t("设备配置已同步")
-                      : t("请重新读取设备")
-                  : t("设置已保存在此浏览器"))}
+                (autosaving
+                  ? t("正在自动保存…")
+                  : connected
+                    ? dirty
+                      ? t("更改尚未应用")
+                      : snapshot
+                        ? t("设备配置已同步")
+                        : t("请重新读取设备")
+                    : t("设置已保存在此浏览器"))}
             </span>
             <small>
               {connected
                 ? t(
-                    "性能调整即时生效；按键、灯光、电源和导入等更改需点击应用。",
+                    "性能页设置自动保存；按键、电源和导入的其他更改需点击应用。",
                   )
                 : t("离线编辑仅存为草稿，连接后不会自动写入。")}
             </small>
@@ -2774,7 +2899,7 @@ export default function App() {
           <div className="button-group">
             <button
               className="button"
-              disabled={!connected || !!busy}
+              disabled={!connected || deviceBusy}
               onClick={refresh}
             >
               <RotateCcw size={15} />
@@ -2782,7 +2907,7 @@ export default function App() {
             </button>
             <button
               className="button primary"
-              disabled={!connected || !snapshot || !dirty || !!busy}
+              disabled={!connected || !snapshot || !dirty || deviceBusy}
               onClick={save}
             >
               {busy ? (
@@ -2922,11 +3047,13 @@ export default function App() {
                 )}
               </li>
               <li>
-                {t("性能调整即时生效；DPI 数值完成输入、消抖滑块松开后保存。")}
+                {t(
+                  "性能页设置自动保存；DPI 数值完成输入、颜色选择完成、滑块调节结束后保存。",
+                )}
               </li>
               <li>
                 {t(
-                  "按键、灯光、电源、档位增删和导入草稿需点击“应用到鼠标”；宏需点击上传。",
+                  "按键、电源和导入的其他草稿需点击“应用到鼠标”；宏需点击上传。",
                 )}
               </li>
             </ol>

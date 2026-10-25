@@ -93,6 +93,15 @@ test("single-field changes clone device state and leave unrelated hardware setti
     { kind: "global", field: "motionSync", value: !baseline.global.motionSync },
     { kind: "lod", value: 1.2 },
     { kind: "activeStage", value: 5 },
+    { kind: "brightness", value: 100 },
+    { kind: "ledEffect", value: "breathe" },
+    { kind: "breatheSpeed", value: 80 },
+    { kind: "color", stage: 2, value: [20, 40, 60] },
+    {
+      kind: "dpiLayout",
+      dpiStages: baseline.profile.dpiStages.slice(0, 4),
+      activeStage: 3,
+    },
     { kind: "dpi", stage: 3, x: 1700 },
     { kind: "dpi", stage: 3, y: 1800 },
     { kind: "dpi", stage: 3, x: 1900, y: 2000 },
@@ -106,12 +115,130 @@ test("single-field changes clone device state and leave unrelated hardware setti
         expected.profile.dpiStages[change.stage - 1].x = change.x;
       if (change.y !== undefined)
         expected.profile.dpiStages[change.stage - 1].y = change.y;
-    } else expected.profile[change.kind] = change.value;
+    } else if (change.kind === "color")
+      expected.profile.dpiStages[change.stage - 1].color = clone(change.value);
+    else if (change.kind === "dpiLayout") {
+      expected.profile.dpiStages = clone(change.dpiStages);
+      expected.profile.activeStage = change.activeStage;
+    } else Object.assign(expected.profile, { [change.kind]: change.value });
     const actual = buildImmediateSettings(baseline, change);
     assert.deepEqual(actual, expected);
     assert.notEqual(actual.profile.buttons, baseline.profile.buttons);
   }
   assert.deepEqual(baseline, before);
+});
+
+test("removing and adding DPI stages saves only the explicit layout and clears its pending flag", async () => {
+  let baseline = snapshot();
+  baseline.profile.activeStage = 6;
+  const fake = fakeClient(baseline);
+  const draft = workspace(baseline);
+  draft.pending = true;
+  draft.dpiLayoutPending = true;
+  draft.profile.buttons[5] = { type: 2, a1: 1, a2: 6 };
+  draft.profile.brightness = 80;
+  draft.global.debounce = 10;
+  const changes: Extract<ImmediateChange, { kind: "dpiLayout" }>[] = [
+    {
+      kind: "dpiLayout",
+      dpiStages: baseline.profile.dpiStages.slice(0, 5),
+      activeStage: 5,
+    },
+    {
+      kind: "dpiLayout",
+      dpiStages: [
+        ...baseline.profile.dpiStages.slice(0, 5),
+        { x: 1200, y: 1600, color: [25, 50, 75] },
+      ],
+      activeStage: 5,
+    },
+  ];
+  for (const change of changes) {
+    const actual = await applyImmediateSetting(fake.client, baseline, change);
+    assert.deepEqual(actual.profile.dpiStages, change.dpiStages);
+    assert.equal(actual.profile.activeStage, 5);
+    assert.deepEqual(actual.profile.buttons, baseline.profile.buttons);
+    assert.equal(actual.profile.brightness, baseline.profile.brightness);
+    assert.deepEqual(actual.global, baseline.global);
+    assert.deepEqual(actual.power, baseline.power);
+    const submitted = clone(draft);
+    submitted.profile.dpiStages = clone(change.dpiStages);
+    submitted.profile.activeStage = change.activeStage;
+    const merged = mergeImmediateSettings(submitted, actual, change);
+    assert.deepEqual(merged.profile.dpiStages, change.dpiStages);
+    assert.equal(merged.profile.activeStage, 5);
+    assert.equal(merged.dpiLayoutPending, false);
+    assert.equal(merged.pending, true);
+    assert.deepEqual(merged.profile.buttons, draft.profile.buttons);
+    assert.equal(merged.profile.brightness, 80);
+    assert.equal(merged.global.debounce, 10);
+    baseline = actual;
+  }
+  assert.deepEqual(fake.calls, [
+    "active",
+    "readProfile",
+    "active",
+    "profile",
+    "active",
+    "active",
+    "readProfile",
+    "active",
+    "profile",
+    "active",
+  ]);
+  assert.equal(draft.dpiLayoutPending, true);
+  assert.equal(draft.profile.dpiStages.length, 6);
+});
+
+test("stage colors and lighting save without flushing other drafts or clearing an imported layout", async () => {
+  const baseline = snapshot();
+  const draft = workspace(baseline);
+  draft.pending = true;
+  draft.dpiLayoutPending = true;
+  draft.profile.buttons[5] = { type: 2, a1: 1, a2: 6 };
+  draft.profile.dpiStages[0].x = Number.NaN;
+  draft.global.debounce = 10;
+  const before = clone(draft);
+  const changes: ImmediateChange[] = [
+    { kind: "color", stage: 2, value: [20, 40, 60] },
+    { kind: "brightness", value: 100 },
+    { kind: "ledEffect", value: "breathe" },
+    { kind: "breatheSpeed", value: 80 },
+  ];
+  for (const change of changes) {
+    const fake = fakeClient(baseline);
+    const actual = await applyImmediateSetting(fake.client, baseline, change);
+    const expectedDevice = clone(baseline);
+    const expectedDraft = clone(draft);
+    if (change.kind === "color") {
+      expectedDevice.profile.dpiStages[change.stage - 1].color = clone(
+        change.value,
+      );
+      expectedDraft.profile.dpiStages[change.stage - 1].color = clone(
+        change.value,
+      );
+    } else if (
+      change.kind === "brightness" ||
+      change.kind === "ledEffect" ||
+      change.kind === "breatheSpeed"
+    ) {
+      Object.assign(expectedDevice.profile, { [change.kind]: change.value });
+      Object.assign(expectedDraft.profile, { [change.kind]: change.value });
+    } else throw new Error("Expected color or lighting edit");
+    assert.deepEqual(fake.getState(), expectedDevice);
+    assert.deepEqual(
+      mergeImmediateSettings(expectedDraft, actual, change),
+      expectedDraft,
+    );
+    assert.deepEqual(fake.calls, [
+      "active",
+      "readProfile",
+      "active",
+      "profile",
+      "active",
+    ]);
+  }
+  assert.deepEqual(draft, before);
 });
 
 test("immediate save preserves pending bindings, LED, other globals, DPI axes and stages", async () => {
@@ -122,6 +249,7 @@ test("immediate save preserves pending bindings, LED, other globals, DPI axes an
   draft.profile.ledEffect = "breathe";
   draft.profile.dpiStages[1].color = [30, 60, 90];
   draft.profile.dpiStages[1].y = 900;
+  draft.profile.dpiStages[1].x = 1200;
   draft.profile.dpiStages[3].x = 3330;
   draft.global.debounce = 10;
   draft.pending = true;
@@ -150,6 +278,7 @@ test("merge updates only fields the user explicitly saved, retaining even invali
   draft.profile.dpiStages[0].x = Number.NaN;
   draft.profile.buttons[1] = { type: 0, a1: 0, a2: 0 };
   draft.profile.lod = 0;
+  draft.global.debounce = 8;
   const change: ImmediateChange = {
     kind: "global",
     field: "debounce",
@@ -179,25 +308,155 @@ test("merging the only pending edit clears pending without losing the workspace 
   assert.equal(merged.name, draft.name);
 });
 
-test("an identical imported DPI layout still needs explicit confirmation after another immediate edit", () => {
+test("late readback retains newer global, profile, and lighting edits and recomputes pending", () => {
+  const baseline = snapshot();
+  const cases: {
+    change: ImmediateChange;
+    edit: (draft: WorkspaceProfile) => void;
+  }[] = [
+    {
+      change: { kind: "global", field: "debounce", value: 8 },
+      edit: (draft) => { draft.global.debounce = 10; },
+    },
+    {
+      change: { kind: "global", field: "motionSync", value: true },
+      edit: (draft) => { draft.global.motionSync = false; },
+    },
+    {
+      change: { kind: "lod", value: 1.2 },
+      edit: (draft) => { draft.profile.lod = 1.4; },
+    },
+    {
+      change: { kind: "activeStage", value: 4 },
+      edit: (draft) => { draft.profile.activeStage = 5; },
+    },
+    {
+      change: { kind: "brightness", value: 100 },
+      edit: (draft) => { draft.profile.brightness = 120; },
+    },
+    {
+      change: { kind: "ledEffect", value: "breathe" },
+      edit: (draft) => { draft.profile.ledEffect = "off"; },
+    },
+    {
+      change: { kind: "breatheSpeed", value: 80 },
+      edit: (draft) => { draft.profile.breatheSpeed = 100; },
+    },
+  ];
+  for (const { change, edit } of cases) {
+    const actual = buildImmediateSettings(baseline, change);
+    const draft = workspace(actual);
+    edit(draft);
+    const before = clone(draft);
+    const merged = mergeImmediateSettings(draft, actual, change);
+    assert.deepEqual(merged, { ...before, pending: true });
+    assert.deepEqual(draft, before);
+  }
+});
+
+test("late DPI and color readback preserves newer input, including an incomplete numeric edit", () => {
+  const baseline = snapshot();
+  const change: ImmediateChange = { kind: "dpi", stage: 2, x: 1000, y: 1200 };
+  const actual = buildImmediateSettings(baseline, change);
+  const draft = workspace(actual);
+  draft.profile.dpiStages[1].x = Number.NaN;
+  draft.pending = true;
+  const merged = mergeImmediateSettings(draft, actual, change);
+  assert.equal(Number.isNaN(merged.profile.dpiStages[1].x), true);
+  assert.equal(merged.profile.dpiStages[1].y, 1200);
+  assert.equal(merged.pending, true);
+  assert.deepEqual(merged.profile.buttons, draft.profile.buttons);
+
+  const colorChange: ImmediateChange = { kind: "color", stage: 2, value: [20, 40, 60] };
+  const colorActual = buildImmediateSettings(baseline, colorChange);
+  const colorDraft = workspace(colorActual);
+  colorDraft.profile.dpiStages[1].color = [5, 10, 15];
+  const colorMerged = mergeImmediateSettings(colorDraft, colorActual, colorChange);
+  assert.deepEqual(colorMerged.profile.dpiStages[1].color, [5, 10, 15]);
+  assert.equal(colorMerged.pending, true);
+});
+
+test("late layout readback cannot erase a newer layout, active stage, color, or incomplete DPI value", () => {
+  const baseline = snapshot();
+  const change: ImmediateChange = {
+    kind: "dpiLayout",
+    dpiStages: baseline.profile.dpiStages.slice(0, 5),
+    activeStage: 5,
+  };
+  const actual = buildImmediateSettings(baseline, change);
+  const edits = [
+    (draft: WorkspaceProfile) => {
+      draft.profile.dpiStages.pop();
+      draft.profile.activeStage = 4;
+    },
+    (draft: WorkspaceProfile) => { draft.profile.activeStage = 4; },
+    (draft: WorkspaceProfile) => { draft.profile.dpiStages[0].color = [1, 2, 3]; },
+    (draft: WorkspaceProfile) => { draft.profile.dpiStages[0].x = Number.NaN; },
+  ];
+  for (const edit of edits) {
+    const draft = workspace(actual);
+    draft.dpiLayoutPending = true;
+    draft.pending = true;
+    edit(draft);
+    const before = clone(draft);
+    const merged = mergeImmediateSettings(draft, actual, change);
+    assert.deepEqual(merged, before);
+    assert.equal(merged.dpiLayoutPending, true);
+    assert.equal(merged.pending, true);
+    assert.deepEqual(draft, before);
+  }
+});
+
+test("readback for a removed DPI stage leaves the newer layout intact", () => {
+  const baseline = snapshot();
+  for (const change of [
+    { kind: "dpi", stage: 6, x: 500 },
+    { kind: "color", stage: 6, value: [20, 40, 60] },
+  ] satisfies ImmediateChange[]) {
+    const actual = buildImmediateSettings(baseline, change);
+    const draft = workspace(actual);
+    draft.profile.dpiStages = draft.profile.dpiStages.slice(0, 4);
+    draft.dpiLayoutPending = true;
+    draft.pending = true;
+    const merged = mergeImmediateSettings(draft, actual, change);
+    assert.deepEqual(merged, draft);
+  }
+});
+
+test("only an explicit layout save clears an imported DPI layout's pending state", () => {
   const baseline = snapshot();
   const draft = {
     ...workspace(baseline),
     dpiLayoutPending: true,
     pending: true,
   };
-  const change: ImmediateChange = {
-    kind: "global",
-    field: "pollingRate",
-    value: 500,
-  };
-  const merged = mergeImmediateSettings(
-    draft,
-    buildImmediateSettings(baseline, change),
-    change,
-  );
-  assert.equal(merged.pending, true);
-  assert.equal(merged.dpiLayoutPending, true);
+  for (const change of [
+    { kind: "global", field: "pollingRate", value: 500 },
+    { kind: "dpi", stage: 1, x: 500 },
+    { kind: "color", stage: 1, value: [20, 40, 60] },
+    { kind: "brightness", value: 80 },
+  ] satisfies ImmediateChange[]) {
+    const actual = buildImmediateSettings(baseline, change);
+    const submitted = {
+      ...workspace(actual),
+      dpiLayoutPending: true,
+      pending: true,
+    };
+    const merged = mergeImmediateSettings(
+      submitted,
+      actual,
+      change,
+    );
+    assert.equal(merged.pending, true);
+    assert.equal(merged.dpiLayoutPending, true);
+  }
+  const confirmed = mergeImmediateSettings(draft, baseline, {
+    kind: "dpiLayout",
+    dpiStages: clone(baseline.profile.dpiStages),
+    activeStage: baseline.profile.activeStage,
+  });
+  assert.equal(confirmed.pending, false);
+  assert.equal(confirmed.dpiLayoutPending, false);
 });
 
 test("validation rejects invalid changes before any device I/O", async () => {
@@ -216,6 +475,32 @@ test("validation rejects invalid changes before any device I/O", async () => {
     { kind: "dpi", stage: 2, x: 55 },
     { kind: "dpi", stage: 2, y: 32010 },
     { kind: "dpi", stage: 2, x: Number.NaN },
+    { kind: "brightness", value: -1 },
+    { kind: "brightness", value: 256 },
+    { kind: "ledEffect", value: "rainbow" },
+    { kind: "breatheSpeed", value: Number.NaN },
+    { kind: "breatheSpeed", value: 256 },
+    { kind: "color", stage: 0, value: [20, 40, 60] },
+    { kind: "color", stage: 7, value: [20, 40, 60] },
+    { kind: "color", stage: 2, value: [20, 256, 60] },
+    { kind: "color", stage: 2, value: [20, 40] },
+    { kind: "dpiLayout", dpiStages: [], activeStage: 1 },
+    { kind: "dpiLayout", dpiStages: defaultProfile().dpiStages, activeStage: 0 },
+    {
+      kind: "dpiLayout",
+      dpiStages: defaultProfile().dpiStages.slice(0, 5),
+      activeStage: 6,
+    },
+    {
+      kind: "dpiLayout",
+      dpiStages: [...defaultProfile().dpiStages, defaultProfile().dpiStages[0]],
+      activeStage: 1,
+    },
+    {
+      kind: "dpiLayout",
+      dpiStages: [{ x: 55, y: 800, color: [20, 40, 60] }],
+      activeStage: 1,
+    },
     { kind: "reset" },
   ];
   for (const change of invalid) {
@@ -237,7 +522,16 @@ test("unchanged settings do not write or issue unnecessary reads", async () => {
     { kind: "lod", value: baseline.profile.lod },
     { kind: "activeStage", value: baseline.profile.activeStage },
     { kind: "dpi", stage: 1, x: baseline.profile.dpiStages[0].x },
-  ] as const)
+    { kind: "brightness", value: baseline.profile.brightness },
+    { kind: "ledEffect", value: baseline.profile.ledEffect },
+    { kind: "breatheSpeed", value: baseline.profile.breatheSpeed },
+    { kind: "color", stage: 1, value: clone(baseline.profile.dpiStages[0].color) },
+    {
+      kind: "dpiLayout",
+      dpiStages: clone(baseline.profile.dpiStages),
+      activeStage: baseline.profile.activeStage,
+    },
+  ] satisfies ImmediateChange[])
     assert.deepEqual(
       await applyImmediateSetting(fake.client, baseline, change),
       baseline,
@@ -325,22 +619,31 @@ test("a profile change during a write rejects success and leaves caller state un
   }
 });
 
-test("physical DPI stage changes are detected before a bulk DPI write can overwrite them", async () => {
+test("external profile changes stop every profile performance write before it can overwrite them", async () => {
   const baseline = snapshot();
-  const fake = fakeClient(baseline);
   const external = clone(baseline);
   external.profile.activeStage = 5;
-  fake.setState(external);
-  await assert.rejects(
-    applyImmediateSetting(fake.client, baseline, {
-      kind: "dpi",
-      stage: 1,
-      x: 500,
-    }),
-    /设备设置已经变化，请重新读取后再应用/,
-  );
-  assert.deepEqual(fake.calls, ["active", "readProfile", "active"]);
-  assert.deepEqual(fake.getState(), external);
+  for (const change of [
+    { kind: "dpi", stage: 1, x: 500 },
+    { kind: "color", stage: 1, value: [20, 40, 60] },
+    { kind: "brightness", value: 80 },
+    { kind: "ledEffect", value: "breathe" },
+    { kind: "breatheSpeed", value: 80 },
+    {
+      kind: "dpiLayout",
+      dpiStages: baseline.profile.dpiStages.slice(0, 4),
+      activeStage: 2,
+    },
+  ] satisfies ImmediateChange[]) {
+    const fake = fakeClient(baseline);
+    fake.setState(external);
+    await assert.rejects(
+      applyImmediateSetting(fake.client, baseline, change),
+      /设备设置已经变化，请重新读取后再应用/,
+    );
+    assert.deepEqual(fake.calls, ["active", "readProfile", "active"]);
+    assert.deepEqual(fake.getState(), external);
+  }
 });
 
 test("changes to other global settings stop immediate writes until device settings are refreshed", async () => {
@@ -392,10 +695,22 @@ test("failed writes propagate without changing the baseline or reporting a saved
     next.lod = 1.9;
     throw new Error("device readback mismatch");
   };
-  await assert.rejects(
-    applyImmediateSetting(fake.client, baseline, { kind: "lod", value: 1.2 }),
-    /device readback mismatch/,
-  );
+  for (const change of [
+    { kind: "lod", value: 1.2 },
+    { kind: "color", stage: 1, value: [20, 40, 60] },
+    { kind: "brightness", value: 80 },
+    { kind: "ledEffect", value: "breathe" },
+    { kind: "breatheSpeed", value: 80 },
+    {
+      kind: "dpiLayout",
+      dpiStages: baseline.profile.dpiStages.slice(0, 4),
+      activeStage: 2,
+    },
+  ] satisfies ImmediateChange[])
+    await assert.rejects(
+      applyImmediateSetting(fake.client, baseline, change),
+      /device readback mismatch/,
+    );
   fake.client.writeGlobalSettings = async (next: GlobalSettings) => {
     next.debounce = 0;
     throw new Error("disconnected");
